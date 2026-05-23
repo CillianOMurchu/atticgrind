@@ -79,7 +79,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       hitCtx.textAlign = 'center';
       hitCtx.textBaseline = 'middle';
       hitCtx.fillStyle = 'white';
-      hitCtx.fillText(textString, width / 2, height * (2 / 3));
+      hitCtx.fillText(textString, width / 2, height * (4 / 5));
     }
 
     this.changeTextFn = (text: string) => {
@@ -100,7 +100,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.textBaseline = 'middle';
 
       const cx = width / 2;
-      const cy = height * (2 / 3);
+      const cy = height * (4 / 5);
 
       ctx.shadowColor = 'black';
       ctx.shadowBlur = 30;

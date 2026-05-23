@@ -63,8 +63,8 @@ export class Skater {
     if (this.fallen) return false;
     const s = this.config.scale;
     return (
-      cx >= this.lastX - 18 * s && cx <= this.lastX + 18 * s &&
-      cy >= this.lastGroundY - 72 * s && cy <= this.lastGroundY
+      cx >= this.lastX - 32 * s && cx <= this.lastX + 32 * s &&
+      cy >= this.lastGroundY - 80 * s && cy <= this.lastGroundY + 10 * s
     );
   }
 

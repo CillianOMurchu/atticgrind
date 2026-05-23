@@ -5,22 +5,15 @@ import { SKATER_PROFILES } from './skater-profiles';
 @Component({
   selector: 'app-skate',
   standalone: true,
-  template: `
-    <canvas
-      #skateCanvas
-      class="skate-canvas"
-      [style.pointer-events]="playing ? 'auto' : 'none'"
-      (click)="onCanvasClick($event)"
-    ></canvas>
-  `,
+  template: `<canvas #skateCanvas class="skate-canvas" (click)="onCanvasClick($event)"></canvas>`,
   styles: [`
     .skate-canvas {
       position: fixed;
       inset: 0;
+      pointer-events: none;
       z-index: 5;
       width: 100vw;
       height: 100vh;
-      cursor: default;
     }
   `],
 })
@@ -43,11 +36,8 @@ export class SkateComponent implements OnInit, OnDestroy {
   }
 
   onCanvasClick(event: MouseEvent): void {
-    if (!this.playing) return;
-    const canvas = this.canvasRef.nativeElement;
-    const rect = canvas.getBoundingClientRect();
-    const cx = event.clientX - rect.left;
-    const cy = event.clientY - rect.top;
+    const cx = event.clientX;
+    const cy = event.clientY;
     for (const skater of this.skaters) {
       if (skater.hitTest(cx, cy)) {
         skater.knock();
@@ -87,6 +77,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       .sort((a, b) => b.laneOffset - a.laneOffset)
       .map(p => new Skater(p));
 
+    canvas.style.pointerEvents = 'auto';
     this.playing = true;
     let f = 0;
 
@@ -142,6 +133,7 @@ export class SkateComponent implements OnInit, OnDestroy {
         ctx.clearRect(0, 0, W, H);
         this.rafId = 0;
         this.playing = false;
+        canvas.style.pointerEvents = 'none';
         this.scheduleNext();
         return;
       }
