@@ -1,6 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
-import { Subscription } from 'rxjs';
-import { AppStateService } from '../services/app-state.service';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Skater } from './skater';
 import { SKATER_PROFILES } from './skater-profiles';
 
@@ -23,21 +21,28 @@ export class SkateComponent implements OnInit, OnDestroy {
   @ViewChild('skateCanvas', { static: true })
   private canvasRef!: ElementRef<HTMLCanvasElement>;
 
-  private readonly appState = inject(AppStateService);
-  private readonly subs = new Subscription();
   private rafId = 0;
+  private timerId = 0;
 
   ngOnInit(): void {
-    this.subs.add(this.appState.skate$.subscribe(() => this.play()));
+    this.scheduleNext();
   }
 
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.subs.unsubscribe();
+    clearTimeout(this.timerId);
   }
 
-  play(): void {
-    if (this.rafId) return;
+  private scheduleNext(): void {
+    const delay = 10_000 + Math.random() * 5_000;
+    this.timerId = window.setTimeout(() => this.play(), delay);
+  }
+
+  private play(): void {
+    if (this.rafId) {
+      this.scheduleNext();
+      return;
+    }
     this.runAnimation();
   }
 
@@ -97,13 +102,6 @@ export class SkateComponent implements OnInit, OnDestroy {
     };
 
     const drawScene = (): void => {
-      const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0,   '#0a0a14');
-      grad.addColorStop(0.6, '#050508');
-      grad.addColorStop(1,   '#020203');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-
       ctx.fillStyle = '#010102';
       ctx.fillRect(0, GROUND_Y, W, ROAD_H);
 
@@ -137,6 +135,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       if (f > TOTAL) {
         ctx.clearRect(0, 0, W, H);
         this.rafId = 0;
+        this.scheduleNext();
         return;
       }
       this.rafId = requestAnimationFrame(tick);

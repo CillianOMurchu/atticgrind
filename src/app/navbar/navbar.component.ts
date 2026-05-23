@@ -7,11 +7,6 @@ import { AppStateService } from '../services/app-state.service';
   template: `
     <nav class="navbar">
       <span class="navbar__title">{{ title }}</span>
-
-      <button class="navbar__trigger-btn" (click)="appState.triggerSkate()">
-        Trigger message
-      </button>
-
       <div class="navbar__controls">
         <button
           class="navbar__rain-btn"
@@ -42,58 +37,10 @@ import { AppStateService } from '../services/app-state.service';
       color: rgba(180, 200, 220, 0.7);
     }
 
-    .navbar__trigger-btn {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(180, 200, 220, 0.25);
-      border-radius: 6px;
-      padding: 6px 20px;
-      color: rgba(180, 200, 220, 0.85);
-      font-family: 'Roboto', sans-serif;
-      font-weight: 900;
-      font-size: 0.85rem;
-      letter-spacing: 0.12em;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .navbar__trigger-btn:hover {
-      border-color: rgba(180, 200, 220, 0.5);
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .navbar__trigger-btn:active {
-      background: rgba(255, 255, 255, 0.15);
-    }
-
     .navbar__controls {
       display: flex;
       align-items: center;
       gap: 20px;
-    }
-
-    .navbar__text-input {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(180, 200, 220, 0.25);
-      border-radius: 6px;
-      padding: 4px 10px;
-      color: rgba(180, 200, 220, 0.85);
-      font-family: 'Roboto', sans-serif;
-      font-weight: 900;
-      font-size: 0.85rem;
-      letter-spacing: 0.2em;
-      width: 120px;
-      outline: none;
-      text-transform: uppercase;
-    }
-
-    .navbar__text-input::placeholder { color: rgba(180, 200, 220, 0.3); }
-
-    .navbar__text-input:focus {
-      border-color: rgba(180, 200, 220, 0.5);
-      background: rgba(255, 255, 255, 0.1);
     }
 
     .navbar__rain-btn {
@@ -123,14 +70,7 @@ export class NavbarComponent {
   protected readonly appState = inject(AppStateService);
 
   readonly title = '';
-  displayText = 'Atticus Is here';
   rainState: 'active' | 'paused' | 'removed' = 'active';
-
-  onTextInput(event: Event): void {
-    const value = (event.target as HTMLInputElement).value.toUpperCase();
-    this.displayText = value;
-    this.appState.setText(value);
-  }
 
   toggleRain(): void {
     this.rainState = this.rainState === 'active' ? 'paused' : 'active';
