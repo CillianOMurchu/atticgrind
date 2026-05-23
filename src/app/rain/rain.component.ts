@@ -80,6 +80,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let isLightning = false;
     let lightningTimer = 0;
     let lightningIntensity = 0;
+    let hbFlicker = 0;
 
     function resize() {
       width = canvas.width = window.innerWidth;
@@ -574,6 +575,21 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       }
     }
 
+    function drawHappyBirthday() {
+      if (hbFlicker <= 0.01) return;
+      const fontSize = Math.min(Math.floor(width * 0.065), 100);
+      ctx.save();
+      ctx.globalAlpha = hbFlicker;
+      ctx.font = `900 ${fontSize}px Roboto, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(160, 210, 255, 1)';
+      ctx.shadowBlur = 20 + lightningIntensity * 40;
+      ctx.fillStyle = 'rgba(225, 242, 255, 0.95)';
+      ctx.fillText('Happy Birthday', width / 2, height * 0.2);
+      ctx.restore();
+    }
+
     function init() {
       resize();
       initClouds();
@@ -609,11 +625,15 @@ export class RainComponent implements AfterViewInit, OnDestroy {
           isLightning = false;
           lightningIntensity = 0;
         }
+      }
 
-        if (lightningIntensity > 0.5 && Math.random() > 0.7) {
-          ctx.fillStyle = `rgba(255, 255, 255, ${lightningIntensity * 0.04})`;
-          ctx.fillRect(0, 0, width, height);
-        }
+      hbFlicker = (isLightning && lightningIntensity > 0)
+        ? lightningIntensity * (0.55 + Math.random() * 0.45)
+        : Math.max(0, hbFlicker - 0.05);
+
+      if (isLightning && lightningIntensity > 0.5 && Math.random() > 0.7) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${lightningIntensity * 0.04})`;
+        ctx.fillRect(0, 0, width, height);
       }
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
@@ -646,6 +666,8 @@ export class RainComponent implements AfterViewInit, OnDestroy {
           splashes.splice(i, 1);
         }
       }
+
+      drawHappyBirthday();
 
       this.rafId = requestAnimationFrame(animate);
     };

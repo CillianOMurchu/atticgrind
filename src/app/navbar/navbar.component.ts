@@ -7,35 +7,24 @@ import { AppStateService } from '../services/app-state.service';
   template: `
     <nav class="navbar">
       <span class="navbar__title">{{ title }}</span>
+
+      <button class="navbar__trigger-btn" (click)="appState.triggerSkate()">
+        Trigger message
+      </button>
+
       <div class="navbar__controls">
-        <input
-          class="navbar__text-input"
-          type="text"
-          [value]="displayText"
-          (input)="onTextInput($event)"
-          maxlength="10"
-          placeholder="RAIN"
-          spellcheck="false"
-        >
-        <button class="navbar__skate-btn" (click)="appState.triggerSkate()">SK8</button>
-        <select
-          class="navbar__select"
-          [value]="rainState"
-          (change)="onRainStateChange($event)"
-        >
-          <option value="active">Active</option>
-          <option value="paused">Pause</option>
-          <option value="removed">Remove</option>
-        </select>
+        <button
+          class="navbar__rain-btn"
+          [class.navbar__rain-btn--on]="rainState === 'active'"
+          (click)="toggleRain()"
+        >{{ rainState === 'active' ? '● ON' : '● OFF' }}</button>
       </div>
     </nav>
   `,
   styles: [`
     .navbar {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 0; left: 0; right: 0;
       z-index: 10;
       display: flex;
       align-items: center;
@@ -51,6 +40,32 @@ import { AppStateService } from '../services/app-state.service';
       font-size: 0.85rem;
       letter-spacing: 0.25em;
       color: rgba(180, 200, 220, 0.7);
+    }
+
+    .navbar__trigger-btn {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(180, 200, 220, 0.25);
+      border-radius: 6px;
+      padding: 6px 20px;
+      color: rgba(180, 200, 220, 0.85);
+      font-family: 'Roboto', sans-serif;
+      font-weight: 900;
+      font-size: 0.85rem;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .navbar__trigger-btn:hover {
+      border-color: rgba(180, 200, 220, 0.5);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .navbar__trigger-btn:active {
+      background: rgba(255, 255, 255, 0.15);
     }
 
     .navbar__controls {
@@ -74,70 +89,41 @@ import { AppStateService } from '../services/app-state.service';
       text-transform: uppercase;
     }
 
-    .navbar__text-input::placeholder {
-      color: rgba(180, 200, 220, 0.3);
-    }
+    .navbar__text-input::placeholder { color: rgba(180, 200, 220, 0.3); }
 
     .navbar__text-input:focus {
       border-color: rgba(180, 200, 220, 0.5);
       background: rgba(255, 255, 255, 0.1);
     }
 
-    .navbar__skate-btn {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(180, 200, 220, 0.25);
+    .navbar__rain-btn {
       border-radius: 6px;
-      padding: 4px 10px;
-      color: rgba(180, 200, 220, 0.85);
+      padding: 4px 14px;
       font-family: 'Roboto', sans-serif;
       font-weight: 900;
       font-size: 0.8rem;
-      letter-spacing: 0.15em;
-      cursor: pointer;
-    }
-
-    .navbar__skate-btn:hover {
-      border-color: rgba(180, 200, 220, 0.5);
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .navbar__skate-btn:active {
-      background: rgba(255, 255, 255, 0.15);
-    }
-
-    .navbar__select {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(180, 200, 220, 0.25);
-      border-radius: 6px;
-      padding: 4px 8px;
-      color: rgba(180, 200, 220, 0.85);
-      font-family: 'Roboto', sans-serif;
-      font-size: 0.8rem;
       letter-spacing: 0.1em;
-      outline: none;
       cursor: pointer;
-      appearance: none;
-      padding-right: 24px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(180,200,220,0.5)'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
+      transition: background 0.25s, border-color 0.25s, color 0.25s;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.55);
+      color: rgba(239, 100, 100, 0.9);
     }
 
-    .navbar__select option {
-      background: #0a0a0f;
-      color: rgba(180, 200, 220, 0.85);
+    .navbar__rain-btn--on {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.55);
+      color: rgba(60, 210, 110, 0.9);
     }
 
-    .navbar__select:focus {
-      border-color: rgba(180, 200, 220, 0.5);
-    }
+    .navbar__rain-btn:hover { filter: brightness(1.25); }
   `],
 })
 export class NavbarComponent {
   protected readonly appState = inject(AppStateService);
 
-  readonly title = 'Happy Birthday';
-  displayText = 'Atticus';
+  readonly title = '';
+  displayText = 'Atticus Is here';
   rainState: 'active' | 'paused' | 'removed' = 'active';
 
   onTextInput(event: Event): void {
@@ -146,9 +132,8 @@ export class NavbarComponent {
     this.appState.setText(value);
   }
 
-  onRainStateChange(event: Event): void {
-    const state = (event.target as HTMLSelectElement).value as typeof this.rainState;
-    this.rainState = state;
-    this.appState.setRain(state);
+  toggleRain(): void {
+    this.rainState = this.rainState === 'active' ? 'paused' : 'active';
+    this.appState.setRain(this.rainState);
   }
 }

@@ -62,6 +62,40 @@ export class SkateComponent implements OnInit, OnDestroy {
     const TOTAL = Math.max(...skaters.map(s => s.totalFrames));
     let f = 0;
 
+    // Foreground skater (lowest laneOffset after sort) drives the text reveal
+    const fg         = skaters[skaters.length - 1];
+    const fontSize   = Math.min(Math.floor(W * 0.075), 130);
+    const textY      = GROUND_Y * 0.42;
+
+    const easeInOutCubic = (t: number): number =>
+      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    const drawBirthdayText = (revealX: number): void => {
+      ctx.save();
+      ctx.font = `900 ${fontSize}px Roboto, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Dim ghost — hints text exists before reveal
+      ctx.globalAlpha = 0.07;
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Happy Birthday', W / 2, textY);
+
+      // Clipped reveal — expands left-to-right with the foreground skater
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, revealX, H);
+      ctx.clip();
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = 'rgba(180, 200, 255, 0.5)';
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = 'rgba(200, 215, 235, 0.95)';
+      ctx.fillText('Happy Birthday', W / 2, textY);
+      ctx.restore();
+
+      ctx.restore();
+    };
+
     const drawScene = (): void => {
       const grad = ctx.createLinearGradient(0, 0, 0, H);
       grad.addColorStop(0,   '#0a0a14');
@@ -89,6 +123,11 @@ export class SkateComponent implements OnInit, OnDestroy {
     const tick = (): void => {
       ctx.clearRect(0, 0, W, H);
       drawScene();
+
+      const lf      = f - fg.config.delay;
+      const progress = Math.max(0, Math.min(1, lf / fg.config.sequence.duration));
+      const revealX  = -60 + (W + 120) * easeInOutCubic(progress);
+      drawBirthdayText(revealX);
 
       for (const skater of skaters) {
         skater.draw(ctx, f, W, GROUND_Y - skater.config.laneOffset, MAX_JH);
