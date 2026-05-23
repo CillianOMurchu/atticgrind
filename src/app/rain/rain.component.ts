@@ -79,7 +79,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       hitCtx.textAlign = 'center';
       hitCtx.textBaseline = 'middle';
       hitCtx.fillStyle = 'white';
-      hitCtx.fillText(textString, width / 2, height / 2);
+      hitCtx.fillText(textString, width / 2, height * (2 / 3));
     }
 
     this.changeTextFn = (text: string) => {
@@ -100,7 +100,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.textBaseline = 'middle';
 
       const cx = width / 2;
-      const cy = height / 2;
+      const cy = height * (2 / 3);
 
       ctx.shadowColor = 'black';
       ctx.shadowBlur = 30;
@@ -110,7 +110,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
 
-      ctx.fillStyle = '#1a1a22';
+      ctx.fillStyle = '#222230';
       ctx.fillText(textString, cx + 5, cy + 5);
 
       const gradient = ctx.createLinearGradient(
@@ -119,22 +119,22 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         0,
         cy + fontSize / 2,
       );
-      gradient.addColorStop(0, '#12121c');
-      gradient.addColorStop(0.3, '#2a2a3a');
-      gradient.addColorStop(0.5, '#111118');
-      gradient.addColorStop(1, '#080810');
+      gradient.addColorStop(0, '#252535');
+      gradient.addColorStop(0.3, '#424260');
+      gradient.addColorStop(0.5, '#1e1e2c');
+      gradient.addColorStop(1, '#14141e');
 
       ctx.fillStyle = gradient;
       ctx.fillText(textString, cx, cy);
 
       ctx.save();
-      if (!isLightning) {
-        ctx.shadowColor = 'rgba(140, 170, 220, 0.25)';
-        ctx.shadowBlur = 12;
-      }
+      ctx.shadowColor = isLightning
+        ? 'rgba(200, 225, 255, 0.9)'
+        : 'rgba(150, 180, 230, 0.5)';
+      ctx.shadowBlur = isLightning ? 40 : 22;
       ctx.fillStyle = isLightning
-        ? 'rgba(255,255,255,0.9)'
-        : 'rgba(190,210,240,0.22)';
+        ? 'rgba(255,255,255,0.92)'
+        : 'rgba(200,218,250,0.45)';
       ctx.fillText(textString, cx, cy - 1);
       ctx.restore();
     }
@@ -566,9 +566,9 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.font = `900 ${fontSize}px Roboto, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      // ctx.shadowColor = 'rgba(160, 210, 255, 1)';
-      // ctx.shadowBlur = 20 + lightningIntensity * 40;
-      // ctx.fillStyle = 'rgba(225, 242, 255, 3.95)';
+      ctx.shadowColor = 'rgba(160, 210, 255, 1)';
+      ctx.shadowBlur = 20 + lightningIntensity * 40;
+      ctx.fillStyle = 'rgba(225, 242, 255, 3.95)';
       ctx.fillText('Happy Birthday !!!', width / 2, height * 0.2);
       ctx.restore();
     }
