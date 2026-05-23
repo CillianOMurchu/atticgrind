@@ -1,0 +1,38 @@
+/* Simple reset to normalize basic browser styles */
+/* Remove default margin on body and ensure box-sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root, app-root {
+  height: 100%;
+}
+
+body, h1, h2, h3, h4, h5, h6, p, ul, ol, figure, blockquote {
+  margin: 0;
+  padding: 0;
+}
+
+ul[role="list"], ol[role="list"] {
+  list-style: none;
+}
+
+img, picture {
+  max-width: 100%;
+  display: block;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* sensible defaults for root element */
+app-root {
+  display: block;
+  min-height: 100vh;
+}
