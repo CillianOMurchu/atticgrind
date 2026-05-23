@@ -4,7 +4,11 @@ import {
   ElementRef,
   OnDestroy,
   ViewChild,
+  inject,
 } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { skip } from 'rxjs/operators';
+import { AppStateService } from '../services/app-state.service';
 
 @Component({
   selector: 'app-rain',
@@ -18,24 +22,21 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
   rainState: 'active' | 'paused' | 'removed' = 'active';
   isCanvasHidden = false;
-  displayText = 'Atticus';
 
+  private readonly appState = inject(AppStateService);
+  private readonly subs = new Subscription();
   private rafId = 0;
   private resizeListener = () => {};
   private animateFn: (() => void) | null = null;
   private changeTextFn: ((text: string) => void) | null = null;
   private fadeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  onRainStateChange(event: Event): void {
-    const state = (event.target as HTMLSelectElement).value as typeof this.rainState;
-
+  private applyRainState(state: 'active' | 'paused' | 'removed'): void {
     if (this.fadeTimeout) {
       clearTimeout(this.fadeTimeout);
       this.fadeTimeout = null;
     }
-
     this.rainState = state;
-
     if (state === 'active') {
       this.isCanvasHidden = false;
       cancelAnimationFrame(this.rafId);
@@ -45,16 +46,8 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       cancelAnimationFrame(this.rafId);
     } else {
       cancelAnimationFrame(this.rafId);
-      this.fadeTimeout = setTimeout(() => {
-        this.isCanvasHidden = true;
-      }, 300);
+      this.fadeTimeout = setTimeout(() => { this.isCanvasHidden = true; }, 5000);
     }
-  }
-
-  onTextInput(event: Event): void {
-    const value = (event.target as HTMLInputElement).value.toUpperCase();
-    this.displayText = value;
-    this.changeTextFn?.(value || 'Atticus');
   }
 
   ngAfterViewInit(): void {
@@ -115,6 +108,10 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       textString = text;
       drawCollisionMap();
     };
+
+    this.subs.add(
+      this.appState.text$.subscribe(text => this.changeTextFn?.(text || 'Atticus')),
+    );
 
     function draw3DText() {
       const fontSize = Math.min(Math.max(width * 0.22, 120), 400);
@@ -657,15 +654,16 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     this.resizeListener = resize;
     window.addEventListener('resize', this.resizeListener);
     init();
+
+    this.subs.add(
+      this.appState.rain$.pipe(skip(1)).subscribe(state => this.applyRainState(state)),
+    );
   }
 
   ngOnDestroy(): void {
-    if (this.rafId) {
-      cancelAnimationFrame(this.rafId);
-    }
-    if (this.fadeTimeout) {
-      clearTimeout(this.fadeTimeout);
-    }
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    if (this.fadeTimeout) clearTimeout(this.fadeTimeout);
     window.removeEventListener('resize', this.resizeListener);
+    this.subs.unsubscribe();
   }
 }
