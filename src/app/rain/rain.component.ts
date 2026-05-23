@@ -137,6 +137,22 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         : 'rgba(200,218,250,0.45)';
       ctx.fillText(textString, cx, cy - 1);
       ctx.restore();
+
+      // Flashing red 'A' — first character of textString
+      if (textString.length > 0) {
+        const totalW  = ctx.measureText(textString).width;
+        const firstCh = textString[0];
+        const charX   = cx - totalW / 2;
+        const pulse   = 0.5 + 0.5 * Math.sin(frameCount * 0.07);
+        ctx.save();
+        ctx.textAlign    = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor  = `rgba(255, 20, 20, ${0.6 + pulse * 0.4})`;
+        ctx.shadowBlur   = 16 + pulse * 32;
+        ctx.fillStyle    = `rgba(${Math.round(200 + pulse * 55)}, ${Math.round(15 + pulse * 20)}, ${Math.round(15 + pulse * 20)}, ${0.8 + pulse * 0.2})`;
+        ctx.fillText(firstCh, charX, cy - 1);
+        ctx.restore();
+      }
     }
 
     function createCloudTexture(size: number, brightness: number) {

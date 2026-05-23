@@ -33,7 +33,7 @@ export class BannerComponent implements OnInit, OnDestroy {
   }
 
   private scheduleNext(): void {
-    const delay = 1_000 + Math.random() * 10_000;
+    const delay = 30_000;
     this.timerId = window.setTimeout(() => this.run(), delay);
   }
 
