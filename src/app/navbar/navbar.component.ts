@@ -8,11 +8,15 @@ import { AppStateService } from '../services/app-state.service';
     <nav class="navbar">
       <span class="navbar__title">{{ title }}</span>
       <div class="navbar__controls">
-        <button
-          class="navbar__rain-btn"
-          [class.navbar__rain-btn--on]="rainState === 'active'"
-          (click)="toggleRain()"
-        >{{ rainState === 'active' ? '● ON' : '● OFF' }}</button>
+        <span class="navbar__slider-label">🌧</span>
+        <input
+          class="navbar__weather-slider"
+          type="range"
+          min="0" max="100" step="1"
+          [value]="weatherValue"
+          (input)="onWeatherChange($event)"
+        >
+        <span class="navbar__slider-label">☀</span>
       </div>
     </nav>
   `,
@@ -40,40 +44,54 @@ import { AppStateService } from '../services/app-state.service';
     .navbar__controls {
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 10px;
     }
 
-    .navbar__rain-btn {
-      border-radius: 6px;
-      padding: 4px 14px;
-      font-family: 'Roboto', sans-serif;
-      font-weight: 900;
-      font-size: 0.8rem;
-      letter-spacing: 0.1em;
+    .navbar__slider-label {
+      font-size: 1rem;
+      line-height: 1;
+      opacity: 0.75;
+    }
+
+    .navbar__weather-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(180, 200, 220, 0.2);
+      outline: none;
       cursor: pointer;
-      transition: background 0.25s, border-color 0.25s, color 0.25s;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.55);
-      color: rgba(239, 100, 100, 0.9);
     }
 
-    .navbar__rain-btn--on {
-      background: rgba(34, 197, 94, 0.15);
-      border-color: rgba(34, 197, 94, 0.55);
-      color: rgba(60, 210, 110, 0.9);
+    .navbar__weather-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(180, 200, 220, 0.85);
+      cursor: pointer;
     }
 
-    .navbar__rain-btn:hover { filter: brightness(1.25); }
+    .navbar__weather-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(180, 200, 220, 0.85);
+      border: none;
+      cursor: pointer;
+    }
   `],
 })
 export class NavbarComponent {
-  protected readonly appState = inject(AppStateService);
+  private readonly appState = inject(AppStateService);
 
   readonly title = '';
-  rainState: 'active' | 'paused' | 'removed' = 'active';
+  weatherValue = 0;
 
-  toggleRain(): void {
-    this.rainState = this.rainState === 'active' ? 'paused' : 'active';
-    this.appState.setRain(this.rainState);
+  onWeatherChange(event: Event): void {
+    this.weatherValue = +(event.target as HTMLInputElement).value;
+    this.appState.setWeather(this.weatherValue / 100);
   }
 }

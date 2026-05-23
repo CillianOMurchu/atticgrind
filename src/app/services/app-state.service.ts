@@ -1,21 +1,14 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AppStateService {
-  private _text = new BehaviorSubject<string>('Atticus');
-  private _rain = new BehaviorSubject<'active' | 'paused' | 'removed'>('active');
-  private _skate = new Subject<void>();
+  private _text    = new BehaviorSubject<string>('Atticus');
+  private _weather = new BehaviorSubject<number>(0); // 0 = full storm, 1 = sunny
 
-  readonly text$ = this._text.asObservable();
-  readonly rain$ = this._rain.asObservable();
-  readonly skate$ = this._skate.asObservable();
+  readonly text$    = this._text.asObservable();
+  readonly weather$ = this._weather.asObservable();
 
-  get rainValue(): 'active' | 'paused' | 'removed' {
-    return this._rain.value;
-  }
-
-  setText(v: string): void { this._text.next(v); }
-  setRain(v: 'active' | 'paused' | 'removed'): void { this._rain.next(v); }
-  triggerSkate(): void { this._skate.next(); }
+  setText(v: string): void    { this._text.next(v); }
+  setWeather(v: number): void { this._weather.next(Math.max(0, Math.min(1, v))); }
 }

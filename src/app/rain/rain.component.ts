@@ -7,7 +7,6 @@ import {
   inject,
 } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { skip } from 'rxjs/operators';
 import { AppStateService } from '../services/app-state.service';
 
 @Component({
@@ -20,35 +19,12 @@ export class RainComponent implements AfterViewInit, OnDestroy {
   @ViewChild('rainCanvas', { static: true })
   canvasRef!: ElementRef<HTMLCanvasElement>;
 
-  rainState: 'active' | 'paused' | 'removed' = 'active';
-  isCanvasHidden = false;
-
   private readonly appState = inject(AppStateService);
   private readonly subs = new Subscription();
   private rafId = 0;
   private resizeListener = () => {};
-  private animateFn: (() => void) | null = null;
   private changeTextFn: ((text: string) => void) | null = null;
-  private fadeTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  private applyRainState(state: 'active' | 'paused' | 'removed'): void {
-    if (this.fadeTimeout) {
-      clearTimeout(this.fadeTimeout);
-      this.fadeTimeout = null;
-    }
-    this.rainState = state;
-    if (state === 'active') {
-      this.isCanvasHidden = false;
-      cancelAnimationFrame(this.rafId);
-      this.animateFn?.();
-    } else if (state === 'paused') {
-      this.isCanvasHidden = false;
-      cancelAnimationFrame(this.rafId);
-    } else {
-      cancelAnimationFrame(this.rafId);
-      this.fadeTimeout = setTimeout(() => { this.isCanvasHidden = true; }, 5000);
-    }
-  }
+  private setWeatherFn: ((w: number) => void) | null = null;
 
   ngAfterViewInit(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -81,6 +57,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let lightningTimer = 0;
     let lightningIntensity = 0;
     let hbFlicker = 0;
+    let weather = 0; // 0 = full storm, 1 = sunny
 
     function resize() {
       width = canvas.width = window.innerWidth;
@@ -590,6 +567,19 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.restore();
     }
 
+    function drawSunnyOverlay() {
+      if (weather <= 0) return;
+      const cx = width / 2;
+      const cy = height * 0.28;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, width * 0.7);
+      grad.addColorStop(0,    `rgba(255, 220, 100, ${weather * 0.40})`);
+      grad.addColorStop(0.3,  `rgba(255, 170,  50, ${weather * 0.22})`);
+      grad.addColorStop(0.65, `rgba(255, 100,  20, ${weather * 0.08})`);
+      grad.addColorStop(1,    'rgba(200, 60, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+    }
+
     function init() {
       resize();
       initClouds();
@@ -603,7 +593,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     const animate = () => {
       frameCount++;
 
-      if (!isLightning && Math.random() < 0.006) {
+      if (!isLightning && Math.random() < 0.006 * (1 - weather)) {
         isLightning = true;
         lightningTimer = Math.random() * 12 + 8;
         lightningIntensity = 1.0;
@@ -636,7 +626,9 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         ctx.fillRect(0, 0, width, height);
       }
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      const bgR = Math.round(weather * 45);
+      const bgG = Math.round(weather * 28);
+      ctx.fillStyle = `rgba(${bgR}, ${bgG}, 0, ${0.4 - weather * 0.1})`;
       ctx.fillRect(0, 0, width, height);
 
       cloudLayers.forEach((layer) => {
@@ -654,10 +646,11 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
       draw3DText();
 
-      drops.forEach((drop) => {
-        drop.update();
-        drop.draw();
-      });
+      const activeDropCount = Math.floor(drops.length * (1 - weather));
+      for (let i = 0; i < activeDropCount; i++) {
+        drops[i].update();
+        drops[i].draw();
+      }
 
       for (let i = splashes.length - 1; i >= 0; i--) {
         splashes[i].update();
@@ -667,24 +660,22 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         }
       }
 
+      drawSunnyOverlay();
       drawHappyBirthday();
 
       this.rafId = requestAnimationFrame(animate);
     };
 
-    this.animateFn = animate;
+    this.setWeatherFn = (w: number) => { weather = w; };
     this.resizeListener = resize;
     window.addEventListener('resize', this.resizeListener);
     init();
 
-    this.subs.add(
-      this.appState.rain$.pipe(skip(1)).subscribe(state => this.applyRainState(state)),
-    );
+    this.subs.add(this.appState.weather$.subscribe(w => this.setWeatherFn?.(w)));
   }
 
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    if (this.fadeTimeout) clearTimeout(this.fadeTimeout);
     window.removeEventListener('resize', this.resizeListener);
     this.subs.unsubscribe();
   }

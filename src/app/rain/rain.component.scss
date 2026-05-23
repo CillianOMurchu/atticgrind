@@ -10,17 +10,3 @@ canvas {
     top: 0;
     left: 0;
 }
-
-.rain-content {
-    opacity: 1;
-    transition: opacity 5s ease;
-
-    &--fading {
-        opacity: 0;
-    }
-
-    &--hidden {
-        visibility: hidden;
-        pointer-events: none;
-    }
-}

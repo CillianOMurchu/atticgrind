@@ -25,7 +25,7 @@ export class SkateComponent implements OnInit, OnDestroy {
   private timerId = 0;
 
   ngOnInit(): void {
-    this.scheduleNext();
+    this.timerId = window.setTimeout(() => this.play(), 3_000 + Math.random() * 2_000);
   }
 
   ngOnDestroy(): void {
@@ -34,7 +34,7 @@ export class SkateComponent implements OnInit, OnDestroy {
   }
 
   private scheduleNext(): void {
-    const delay = 10_000 + Math.random() * 5_000;
+    const delay = 10_000 + Math.random() * 2_000;
     this.timerId = window.setTimeout(() => this.play(), delay);
   }
 
