@@ -4,7 +4,7 @@ import { BehaviorSubject } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class AppStateService {
   private _text    = new BehaviorSubject<string>('Atticus');
-  private _weather = new BehaviorSubject<number>(0); // 0 = full storm, 1 = sunny
+  private _weather = new BehaviorSubject<number>(0.9); // 0 = full storm, 1 = sunny
 
   readonly text$    = this._text.asObservable();
   readonly weather$ = this._weather.asObservable();

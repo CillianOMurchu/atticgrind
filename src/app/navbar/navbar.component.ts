@@ -88,7 +88,7 @@ export class NavbarComponent {
   private readonly appState = inject(AppStateService);
 
   readonly title = '';
-  weatherValue = 0;
+  weatherValue = 90;
 
   onWeatherChange(event: Event): void {
     this.weatherValue = +(event.target as HTMLInputElement).value;
