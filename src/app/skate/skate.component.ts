@@ -101,22 +101,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       ctx.restore();
     };
 
-    const drawScene = (): void => {
-      ctx.fillStyle = '#010102';
-      ctx.fillRect(0, GROUND_Y, W, ROAD_H);
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); ctx.stroke();
-
-      ctx.setLineDash([40, 28]);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.beginPath();
-      ctx.moveTo(0, GROUND_Y + ROAD_H * 0.55); ctx.lineTo(W, GROUND_Y + ROAD_H * 0.55);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    };
+    const drawScene = (): void => {};
 
     const tick = (): void => {
       ctx.clearRect(0, 0, W, H);
