@@ -1,0 +1,7 @@
+.ui-btn {
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+.ui-btn:active { transform: translateY(1px) scale(0.998); }
+.ui-btn:hover { opacity: 0.96; }
+.ui-btn.secondary { background: transparent; }
+.ui-btn.ghost { background: transparent; }
