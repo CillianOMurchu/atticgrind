@@ -10,3 +10,74 @@ canvas {
     top: 0;
     left: 0;
 }
+
+.rain-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+
+    &__title {
+        font-family: 'Roboto', sans-serif;
+        font-weight: 900;
+        font-size: 0.85rem;
+        letter-spacing: 0.25em;
+        color: rgba(180, 200, 220, 0.7);
+    }
+
+    &__toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+
+        input[type='checkbox'] {
+            display: none;
+        }
+
+        input:checked + .rain-nav__track {
+            background: rgba(80, 140, 200, 0.45);
+            border-color: rgba(180, 200, 220, 0.5);
+
+            &::after {
+                transform: translateX(20px);
+            }
+        }
+    }
+
+    &__track {
+        position: relative;
+        width: 44px;
+        height: 24px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(180, 200, 220, 0.25);
+        border-radius: 12px;
+        transition: background 0.2s, border-color 0.2s;
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 16px;
+            height: 16px;
+            background: rgba(180, 200, 220, 0.85);
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+    }
+
+    &__label {
+        font-family: 'Roboto', sans-serif;
+        font-size: 0.8rem;
+        letter-spacing: 0.1em;
+        color: rgba(180, 200, 220, 0.6);
+    }
+}

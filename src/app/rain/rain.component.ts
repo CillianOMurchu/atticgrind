@@ -9,8 +9,20 @@ import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@ang
 export class RainComponent implements AfterViewInit, OnDestroy {
   @ViewChild('rainCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
+  rainEnabled = true;
+
   private rafId = 0;
   private resizeListener = () => {};
+  private animateFn: (() => void) | null = null;
+
+  toggleRain(): void {
+    this.rainEnabled = !this.rainEnabled;
+    if (this.rainEnabled) {
+      this.animateFn?.();
+    } else {
+      cancelAnimationFrame(this.rafId);
+    }
+  }
 
   ngAfterViewInit(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -551,6 +563,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       this.rafId = requestAnimationFrame(animate);
     };
 
+    this.animateFn = animate;
     this.resizeListener = resize;
     window.addEventListener('resize', this.resizeListener);
     init();

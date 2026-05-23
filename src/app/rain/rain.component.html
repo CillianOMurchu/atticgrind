@@ -1,4 +1,12 @@
 <div class="bg-black overflow-hidden w-full h-screen m-0 p-0">
-    <canvas #rainCanvas></canvas>
-    <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.8)_100%)]"></div>
+  <nav class="rain-nav">
+    <span class="rain-nav__title">RAIN</span>
+    <label class="rain-nav__toggle" title="Toggle rain">
+      <input type="checkbox" [checked]="rainEnabled" (change)="toggleRain()">
+      <span class="rain-nav__track"></span>
+      <span class="rain-nav__label">Rain</span>
+    </label>
+  </nav>
+  <canvas #rainCanvas></canvas>
+  <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.8)_100%)]"></div>
 </div>
