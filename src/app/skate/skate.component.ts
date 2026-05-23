@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Skater } from './skater';
 import { SKATER_PROFILES } from './skater-profiles';
+import { Footballer } from './footballer';
 
 @Component({
   selector: 'app-skate',
@@ -24,6 +25,7 @@ export class SkateComponent implements OnInit, OnDestroy {
   private rafId = 0;
   private timerId = 0;
   private skaters: Skater[] = [];
+  private footballer: Footballer | null = null;
   playing = false;
 
   ngOnInit(): void {
@@ -77,6 +79,8 @@ export class SkateComponent implements OnInit, OnDestroy {
       .sort((a, b) => b.laneOffset - a.laneOffset)
       .map(p => new Skater(p));
 
+    this.footballer = new Footballer(W + 100, GROUND_Y);
+
     canvas.style.pointerEvents = 'auto';
     this.playing = true;
     let f = 0;
@@ -127,12 +131,20 @@ export class SkateComponent implements OnInit, OnDestroy {
         skater.draw(ctx, f, W, GROUND_Y - skater.config.laneOffset, MAX_JH);
       }
 
+      if (this.footballer) {
+        this.footballer.update();
+        this.footballer.draw(ctx);
+      }
+
       f++;
 
-      if (this.skaters.every(s => s.isDone(f))) {
+      const skatersDone    = this.skaters.every(s => s.isDone(f));
+      const footballerDone = !this.footballer || this.footballer.isDone();
+      if (skatersDone && footballerDone) {
         ctx.clearRect(0, 0, W, H);
         this.rafId = 0;
         this.playing = false;
+        canvas.style.pointerEvents = 'none';
         this.scheduleNext();
         return;
       }
