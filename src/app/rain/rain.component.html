@@ -11,13 +11,24 @@
         placeholder="RAIN"
         spellcheck="false"
       >
-      <label class="rain-nav__toggle" title="Toggle rain">
-        <input type="checkbox" [checked]="rainEnabled" (change)="toggleRain()">
-        <span class="rain-nav__track"></span>
-        <span class="rain-nav__label">Rain</span>
-      </label>
+      <select
+        class="rain-nav__select"
+        [value]="rainState"
+        (change)="onRainStateChange($event)"
+      >
+        <option value="active">Active</option>
+        <option value="paused">Pause</option>
+        <option value="removed">Remove</option>
+      </select>
     </div>
   </nav>
-  <canvas #rainCanvas></canvas>
-  <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.8)_100%)]"></div>
+
+  <div
+    class="rain-content"
+    [class.rain-content--fading]="rainState === 'removed'"
+    [class.rain-content--hidden]="isCanvasHidden"
+  >
+    <canvas #rainCanvas></canvas>
+    <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.8)_100%)]"></div>
+  </div>
 </div>

@@ -1,4 +1,10 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  OnDestroy,
+  ViewChild,
+} from '@angular/core';
 
 @Component({
   selector: 'app-rain',
@@ -7,22 +13,41 @@ import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@ang
   styleUrls: ['./rain.component.scss'],
 })
 export class RainComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('rainCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('rainCanvas', { static: true })
+  canvasRef!: ElementRef<HTMLCanvasElement>;
 
-  rainEnabled = true;
+  rainState: 'active' | 'paused' | 'removed' = 'active';
+  isCanvasHidden = false;
   displayText = 'Atticus';
 
   private rafId = 0;
   private resizeListener = () => {};
   private animateFn: (() => void) | null = null;
   private changeTextFn: ((text: string) => void) | null = null;
+  private fadeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  toggleRain(): void {
-    this.rainEnabled = !this.rainEnabled;
-    if (this.rainEnabled) {
+  onRainStateChange(event: Event): void {
+    const state = (event.target as HTMLSelectElement).value as typeof this.rainState;
+
+    if (this.fadeTimeout) {
+      clearTimeout(this.fadeTimeout);
+      this.fadeTimeout = null;
+    }
+
+    this.rainState = state;
+
+    if (state === 'active') {
+      this.isCanvasHidden = false;
+      cancelAnimationFrame(this.rafId);
       this.animateFn?.();
+    } else if (state === 'paused') {
+      this.isCanvasHidden = false;
+      cancelAnimationFrame(this.rafId);
     } else {
       cancelAnimationFrame(this.rafId);
+      this.fadeTimeout = setTimeout(() => {
+        this.isCanvasHidden = true;
+      }, 300);
     }
   }
 
@@ -34,9 +59,13 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     const canvas = this.canvasRef.nativeElement;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+    const ctx = canvas.getContext('2d', {
+      willReadFrequently: true,
+    }) as CanvasRenderingContext2D;
     const hitCanvas = document.createElement('canvas');
-    const hitCtx = hitCanvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+    const hitCtx = hitCanvas.getContext('2d', {
+      willReadFrequently: true,
+    }) as CanvasRenderingContext2D;
     const cloudCanvas = document.createElement('canvas');
 
     let width = 0;
@@ -107,7 +136,12 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.fillStyle = '#111';
       ctx.fillText(textString, cx + 5, cy + 5);
 
-      const gradient = ctx.createLinearGradient(0, cy - fontSize / 2, 0, cy + fontSize / 2);
+      const gradient = ctx.createLinearGradient(
+        0,
+        cy - fontSize / 2,
+        0,
+        cy + fontSize / 2,
+      );
       gradient.addColorStop(0, '#050505');
       gradient.addColorStop(0.3, '#222');
       gradient.addColorStop(0.5, '#080808');
@@ -117,7 +151,9 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.fillText(textString, cx, cy);
 
       ctx.save();
-      ctx.fillStyle = isLightning ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.1)';
+      ctx.fillStyle = isLightning
+        ? 'rgba(255,255,255,0.9)'
+        : 'rgba(255,255,255,0.1)';
       ctx.fillText(textString, cx, cy - 1);
       ctx.restore();
     }
@@ -142,13 +178,22 @@ export class RainComponent implements AfterViewInit, OnDestroy {
           0,
           centerX + offsetX,
           centerY + offsetY,
-          radius
+          radius,
         );
 
         const alpha = 0.15 + Math.random() * 0.1;
-        gradient.addColorStop(0, `rgba(${brightness + 25}, ${brightness + 25}, ${brightness + 30}, ${alpha})`);
-        gradient.addColorStop(0.5, `rgba(${brightness}, ${brightness}, ${brightness + 15}, ${alpha * 0.6})`);
-        gradient.addColorStop(1, `rgba(${brightness - 10}, ${brightness - 10}, ${brightness}, 0)`);
+        gradient.addColorStop(
+          0,
+          `rgba(${brightness + 25}, ${brightness + 25}, ${brightness + 30}, ${alpha})`,
+        );
+        gradient.addColorStop(
+          0.5,
+          `rgba(${brightness}, ${brightness}, ${brightness + 15}, ${alpha * 0.6})`,
+        );
+        gradient.addColorStop(
+          1,
+          `rgba(${brightness - 10}, ${brightness - 10}, ${brightness}, 0)`,
+        );
 
         tempCtx.fillStyle = gradient;
         tempCtx.fillRect(0, 0, size, size);
@@ -210,7 +255,11 @@ export class RainComponent implements AfterViewInit, OnDestroy {
             const x = cloud.x - this.offset + loop * width * 2;
             const y = this.y + cloud.offsetY;
             if (x + cloud.size > -cloud.size && x < width + cloud.size) {
-              ctx.drawImage(cloud.texture, x - cloud.size / 2, y - cloud.size / 2);
+              ctx.drawImage(
+                cloud.texture,
+                x - cloud.size / 2,
+                y - cloud.size / 2,
+              );
             }
           });
         }
@@ -254,12 +303,24 @@ export class RainComponent implements AfterViewInit, OnDestroy {
             y: branchPoint.y + Math.random() * 150 + 50,
           };
           this.segments.push(
-            ...this.createBranch(branchPoint.x, branchPoint.y, branchEnd.x, branchEnd.y, 0.6)
+            ...this.createBranch(
+              branchPoint.x,
+              branchPoint.y,
+              branchEnd.x,
+              branchEnd.y,
+              0.6,
+            ),
           );
         }
       }
 
-      createBranch(x1: number, y1: number, x2: number, y2: number, widthMult: number) {
+      createBranch(
+        x1: number,
+        y1: number,
+        x2: number,
+        y2: number,
+        widthMult: number,
+      ) {
         const segments: any[] = [];
         const steps = 10;
         let currentX = x1;
@@ -392,7 +453,10 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       isSolid(tx: number, ty: number) {
         if (ty < 0 || ty >= height || tx < 0 || tx >= width) return false;
         if (ty > height / 2 - 250 && ty < height / 2 + 250) {
-          return hitCtx.getImageData(Math.floor(tx), Math.floor(ty), 1, 1).data[0] > 100;
+          return (
+            hitCtx.getImageData(Math.floor(tx), Math.floor(ty), 1, 1).data[0] >
+            100
+          );
         }
         return false;
       }
@@ -423,7 +487,9 @@ export class RainComponent implements AfterViewInit, OnDestroy {
               }
 
               const noise = (Math.random() - 0.5) * 2;
-              this.vx = Math.sin(this.y * this.oscillationSpeed + this.phase) * 0.5 + noise;
+              this.vx =
+                Math.sin(this.y * this.oscillationSpeed + this.phase) * 0.5 +
+                noise;
               this.y += this.vy;
               this.x += this.vx;
             } else {
@@ -475,7 +541,12 @@ export class RainComponent implements AfterViewInit, OnDestroy {
           let stretch = this.vy * 18;
           if (stretch < this.size) stretch = this.size;
 
-          const grad = ctx.createLinearGradient(this.x, this.y - stretch, this.x, this.y);
+          const grad = ctx.createLinearGradient(
+            this.x,
+            this.y - stretch,
+            this.x,
+            this.y,
+          );
           grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
           grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.05)');
           grad.addColorStop(1, 'rgba(255, 255, 255, 0.3)');
@@ -494,7 +565,13 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
           ctx.beginPath();
           ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.35, 0, Math.PI * 2);
+          ctx.arc(
+            this.x - this.size * 0.3,
+            this.y - this.size * 0.3,
+            this.size * 0.35,
+            0,
+            Math.PI * 2,
+          );
           ctx.fill();
         }
       }
@@ -585,6 +662,9 @@ export class RainComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
+    }
+    if (this.fadeTimeout) {
+      clearTimeout(this.fadeTimeout);
     }
     window.removeEventListener('resize', this.resizeListener);
   }
