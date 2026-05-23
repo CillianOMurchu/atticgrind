@@ -1,0 +1,1 @@
+export const BANNER_MESSAGE = 'Hi Atticus, happy birthday pal. Lets figure out a decent gift!';

@@ -133,7 +133,6 @@ export class SkateComponent implements OnInit, OnDestroy {
         ctx.clearRect(0, 0, W, H);
         this.rafId = 0;
         this.playing = false;
-        canvas.style.pointerEvents = 'none';
         this.scheduleNext();
         return;
       }
