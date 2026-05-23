@@ -24,6 +24,19 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+function seg(
+  ctx: CanvasRenderingContext2D,
+  x1: number, y1: number,
+  jx: number, jy: number,
+  x2: number, y2: number,
+  lw: number, jr: number,
+): void {
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(jx, jy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(x2, y2); ctx.stroke();
+  if (jr > 0) { ctx.beginPath(); ctx.arc(jx, jy, jr, 0, Math.PI * 2); ctx.fill(); }
+}
+
 // ── Phase frame boundaries ────────────────────────────────────────────────────
 const F_FALL   = 38;
 const F_RUB    = 118;   // 80 frames sitting & rubbing
@@ -34,6 +47,7 @@ export class Skater {
   private trail: TrailFrame[] = [];
   private prevJH = 0;
   private landingLocalFrame = -999;
+  private lastMark = -99;
 
   // Hit detection – updated each normal draw tick
   private lastX = 0;
@@ -416,12 +430,8 @@ export class Skater {
     ctx.lineCap = 'round';  ctx.lineJoin = 'round';
     ctx.lineWidth = 5 * s;
 
-    ctx.beginPath();
-    ctx.moveTo(x - 5 * s + lean, hipY);
-    ctx.quadraticCurveTo(x - 13 * s + lean, kneeY, x - 11 * s, ankleY); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + 5 * s + lean, hipY);
-    ctx.quadraticCurveTo(x + 11 * s + lean, kneeY, x + 9 * s, ankleY); ctx.stroke();
+    seg(ctx, x-5*s+lean, hipY,  x-13*s+lean, kneeY,  x-11*s, ankleY,  5*s, 2.5*s);
+    seg(ctx, x+5*s+lean, hipY,  x+11*s+lean, kneeY,  x+9*s,  ankleY,  5*s, 2.5*s);
 
     ctx.beginPath();
     ctx.moveTo(x + lean * 0.8, hipY); ctx.lineTo(x - 3 * s + lean, shldrY); ctx.stroke();
@@ -429,20 +439,46 @@ export class Skater {
     ctx.lineWidth = 4 * s;
     if (hs > 0.05) {
       const handY = lerp(shldrY + 16 * s, groundY - 4 * s, hs);
-      ctx.beginPath(); ctx.moveTo(x - 3*s + lean, shldrY + 5*s); ctx.lineTo(x - 10*s, handY); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x - 3*s + lean, shldrY + 5*s); ctx.lineTo(x + 8*s, handY);  ctx.stroke();
+      const lhEX = (x-3*s+lean + x-10*s) * 0.5 - 3*s, lhEY = (shldrY+5*s + handY) * 0.5 + 3*s;
+      seg(ctx, x-3*s+lean, shldrY+5*s,  lhEX, lhEY,  x-10*s, handY,  4*s, 2*s);
+      const rhEX = (x-3*s+lean + x+8*s) * 0.5 + 3*s,  rhEY = (shldrY+5*s + handY) * 0.5 + 3*s;
+      seg(ctx, x-3*s+lean, shldrY+5*s,  rhEX, rhEY,  x+8*s,  handY,  4*s, 2*s);
     } else if (isAir) {
       const swing = Math.sin((jh / maxJH) * Math.PI);
-      ctx.beginPath(); ctx.moveTo(x - 3*s + lean, shldrY + 5*s); ctx.lineTo(x - (18+swing*4)*s, shldrY - (8+swing*6)*s); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x - 3*s + lean, shldrY + 5*s); ctx.lineTo(x + (16+swing*4)*s, shldrY - (2+swing*4)*s); ctx.stroke();
+      const laHX = x-(18+swing*4)*s, laHY = shldrY-(8+swing*6)*s;
+      const laEX = (x-3*s+lean + laHX) * 0.5 - 3*s, laEY = (shldrY+5*s + laHY) * 0.5;
+      seg(ctx, x-3*s+lean, shldrY+5*s,  laEX, laEY,  laHX, laHY,  4*s, 2*s);
+      const raHX = x+(16+swing*4)*s, raHY = shldrY-(2+swing*4)*s;
+      const raEX = (x-3*s+lean + raHX) * 0.5 + 3*s, raEY = (shldrY+5*s + raHY) * 0.5;
+      seg(ctx, x-3*s+lean, shldrY+5*s,  raEX, raEY,  raHX, raHY,  4*s, 2*s);
     } else {
       const armSwing = Math.sin(localFrame * 0.18) * 4 * s;
-      ctx.beginPath(); ctx.moveTo(x - 3*s + lean, shldrY + 5*s); ctx.lineTo(x - 14*s + lean, shldrY + 16*s + armSwing); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x - 3*s + lean, shldrY + 5*s); ctx.lineTo(x + 10*s + lean, shldrY + 16*s - armSwing); ctx.stroke();
+      const lHX = x-14*s+lean, lHY = shldrY+16*s+armSwing;
+      const lEX = (x-3*s+lean + lHX) * 0.5 - 4*s, lEY = (shldrY+5*s + lHY) * 0.5 + 3*s;
+      seg(ctx, x-3*s+lean, shldrY+5*s,  lEX, lEY,  lHX, lHY,  4*s, 2*s);
+      const rHX = x+10*s+lean, rHY = shldrY+16*s-armSwing;
+      const rEX = (x-3*s+lean + rHX) * 0.5 + 4*s, rEY = (shldrY+5*s + rHY) * 0.5 + 3*s;
+      seg(ctx, x-3*s+lean, shldrY+5*s,  rEX, rEY,  rHX, rHY,  4*s, 2*s);
     }
 
     ctx.beginPath();
     ctx.arc(x - 3 * s + lean, headY, 8 * s, 0, Math.PI * 2); ctx.fill();
+
+    if (!isAir && hs === 0 && localFrame - this.lastMark > 12 && Math.random() < 0.08) {
+      this.lastMark = localFrame;
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.22;
+      ctx.strokeStyle = '#fff';
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        const dy  = (i - 1) * 5 * s;
+        const len = (3 - Math.abs(i - 1)) * 7 * s;
+        ctx.lineWidth = Math.max(0.5, (2 - Math.abs(i - 1)) * s);
+        ctx.beginPath(); ctx.moveTo(x + 20*s, ankleY + dy); ctx.lineTo(x + 20*s + len, ankleY + dy); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 }

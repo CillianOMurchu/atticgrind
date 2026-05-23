@@ -1,0 +1,76 @@
+:root {
+  /* Colors */
+  --bg: 0 0 0; /* rgb as three numbers for easy use with color-mix */
+  --surface: 10 12 15;
+  --accent: 98 165 255; /* blue-ish */
+  --accent-2: 170 90 255; /* purple */
+  --text: 245 246 248;
+  --muted: 160 170 180;
+
+  /* Sizing */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --gap-sm: 8px;
+  --gap-md: 16px;
+  --control-height: 44px;
+
+  /* Elevation (used with box-shadow) */
+  --shadow-sm: 0 6px 14px rgba(2,6,23,0.6);
+
+  /* Typography */
+  --font-family-system: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  --font-size-md: 16px;
+
+  /* Control variants */
+  --btn-padding: 0 var(--gap-md);
+}
+
+/* Utilities for using rgb variables conveniently */
+.bg-surface { background-color: rgb(var(--surface)); }
+.text-default { color: rgb(var(--text)); }
+.muted { color: rgb(var(--muted)); }
+
+/* Button base */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--control-height);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-system);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  border: none;
+  background: rgb(var(--accent));
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-btn.secondary {
+  background: transparent;
+  border: 1px solid rgba(var(--muted), 0.14);
+  color: rgb(var(--text));
+}
+
+.ui-btn.ghost {
+  background: transparent;
+  color: rgb(var(--text));
+  box-shadow: none;
+}
+
+.ui-input {
+  height: var(--control-height);
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(var(--muted), 0.12);
+  background: rgba(var(--surface), 0.04);
+  color: rgb(var(--text));
+  font-family: var(--font-family-system);
+}
+
+.ui-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(98,165,255,0.06);
+  border-color: rgb(var(--accent));
+}

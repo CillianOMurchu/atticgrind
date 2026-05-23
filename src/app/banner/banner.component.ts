@@ -148,6 +148,18 @@ export class BannerComponent implements OnInit, OnDestroy {
       ctx.restore();
     };
 
+    const seg = (
+      x1: number, y1: number,
+      jx: number, jy: number,
+      x2: number, y2: number,
+      lw: number, jr: number,
+    ): void => {
+      ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(jx, jy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(x2, y2); ctx.stroke();
+      if (jr > 0) { ctx.beginPath(); ctx.arc(jx, jy, jr, 0, Math.PI * 2); ctx.fill(); }
+    };
+
     const drawSkater = (x: number, groundY: number): void => {
       const s         = 1.0;
       const step      = Math.sin(f * 0.32) * 10 * s;
@@ -183,14 +195,8 @@ export class BannerComponent implements OnInit, OnDestroy {
       ctx.lineWidth   = 5 * s;
 
       // Legs — mirrored for left-facing skater
-      ctx.beginPath();
-      ctx.moveTo(x - 5 * s, hipY);
-      ctx.quadraticCurveTo(x - 13 * s, kneeY + step, x - 11 * s, ankleY + step * 0.5);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x + 5 * s, hipY);
-      ctx.quadraticCurveTo(x + 11 * s, kneeY - step, x + 9 * s, ankleY - step * 0.5);
-      ctx.stroke();
+      seg(x-5*s, hipY,  x-13*s, kneeY+step,  x-11*s, ankleY+step*0.5,  5*s, 2.5*s);
+      seg(x+5*s, hipY,  x+11*s, kneeY-step,  x+9*s,  ankleY-step*0.5,  5*s, 2.5*s);
 
       // Torso
       ctx.beginPath();
@@ -201,16 +207,15 @@ export class BannerComponent implements OnInit, OnDestroy {
       ctx.lineWidth = 4 * s;
 
       // Forward arm (left — direction of travel)
-      ctx.beginPath();
-      ctx.moveTo(shldrX, shldrY + 5 * s);
-      ctx.lineTo(x - 14 * s, shldrY + 16 * s + Math.sin(f * 0.18) * 4 * s);
-      ctx.stroke();
+      const armSwing = Math.sin(f * 0.18) * 4 * s;
+      const faHX = x - 14*s, faHY = shldrY + 16*s + armSwing;
+      const faEX = (shldrX + faHX) * 0.5 - 4*s, faEY = (shldrY+5*s + faHY) * 0.5 + 3*s;
+      seg(shldrX, shldrY+5*s,  faEX, faEY,  faHX, faHY,  4*s, 2*s);
 
       // Trailing arm — extends right to hold the banner rope
-      ctx.beginPath();
-      ctx.moveTo(shldrX, shldrY + 5 * s);
-      ctx.lineTo(x + BACK_OFFSET + 3, bannerCY + centerAt(0));
-      ctx.stroke();
+      const taHX = x + BACK_OFFSET + 3, taHY = bannerCY + centerAt(0);
+      const taEX = (shldrX + taHX) * 0.5 + 4*s, taEY = (shldrY+5*s + taHY) * 0.5 + 3*s;
+      seg(shldrX, shldrY+5*s,  taEX, taEY,  taHX, taHY,  4*s, 2*s);
 
       // Head
       ctx.fillStyle = '#fff';

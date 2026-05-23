@@ -1,7 +1,8 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Climber } from './climber';
+import { Footballer } from './footballer';
 import { Skater } from './skater';
 import { SKATER_PROFILES } from './skater-profiles';
-import { Footballer } from './footballer';
 
 @Component({
   selector: 'app-skate',
@@ -26,6 +27,7 @@ export class SkateComponent implements OnInit, OnDestroy {
   private timerId = 0;
   private skaters: Skater[] = [];
   private footballer: Footballer | null = null;
+  private climber: Climber | null = null;
   playing = false;
 
   ngOnInit(): void {
@@ -80,6 +82,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       .map(p => new Skater(p));
 
     this.footballer = new Footballer(W + 100, GROUND_Y);
+    this.climber = new Climber(H + 80);
 
     canvas.style.pointerEvents = 'auto';
     this.playing = true;
@@ -102,7 +105,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       // Dim ghost — hints text exists before reveal
       ctx.globalAlpha = 0.07;
       ctx.fillStyle = '#fff';
-      ctx.fillText('Happy Birthday !!!', W / 2, textY);
+      // ctx.fillText('Happy Birthday !!!', W / 2, textY);
 
       // Clipped reveal — expands left-to-right with the foreground skater
       ctx.save();
@@ -113,7 +116,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       ctx.shadowColor = 'rgba(180, 200, 255, 0.5)';
       ctx.shadowBlur = 20;
       ctx.fillStyle = 'rgba(200, 215, 235, 0.95)';
-      ctx.fillText('Happy Birthday !!!', W / 2, textY);
+      // ctx.fillText('Happy Birthday !!!', W / 2, textY);
       ctx.restore();
 
       ctx.restore();
@@ -136,11 +139,17 @@ export class SkateComponent implements OnInit, OnDestroy {
         this.footballer.draw(ctx);
       }
 
+      if (this.climber) {
+        this.climber.update();
+        // this.climber.draw(ctx);
+      }
+
       f++;
 
       const skatersDone    = this.skaters.every(s => s.isDone(f));
       const footballerDone = !this.footballer || this.footballer.isDone();
-      if (skatersDone && footballerDone) {
+      const climberDone    = !this.climber    || this.climber.isDone();
+      if (skatersDone && footballerDone && climberDone) {
         ctx.clearRect(0, 0, W, H);
         this.rafId = 0;
         this.playing = false;
