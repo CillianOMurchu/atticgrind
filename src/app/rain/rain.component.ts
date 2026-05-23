@@ -10,10 +10,12 @@ export class RainComponent implements AfterViewInit, OnDestroy {
   @ViewChild('rainCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
   rainEnabled = true;
+  displayText = 'Atticus';
 
   private rafId = 0;
   private resizeListener = () => {};
   private animateFn: (() => void) | null = null;
+  private changeTextFn: ((text: string) => void) | null = null;
 
   toggleRain(): void {
     this.rainEnabled = !this.rainEnabled;
@@ -22,6 +24,12 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     } else {
       cancelAnimationFrame(this.rafId);
     }
+  }
+
+  onTextInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value.toUpperCase();
+    this.displayText = value;
+    this.changeTextFn?.(value || 'Atticus');
   }
 
   ngAfterViewInit(): void {
@@ -40,7 +48,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let frameCount = 0;
 
     const dropCount = 1200;
-    const textString = 'RAIN';
+    let textString = 'Atticus';
 
     const RAIN_ANGLE = 5;
     const rainAngleRad = (RAIN_ANGLE * Math.PI) / 180;
@@ -73,6 +81,11 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       hitCtx.fillStyle = 'white';
       hitCtx.fillText(textString, width / 2, height / 2);
     }
+
+    this.changeTextFn = (text: string) => {
+      textString = text;
+      drawCollisionMap();
+    };
 
     function draw3DText() {
       const fontSize = Math.min(Math.max(width * 0.22, 120), 400);
