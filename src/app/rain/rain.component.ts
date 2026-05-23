@@ -88,7 +88,9 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     };
 
     this.subs.add(
-      this.appState.text$.subscribe(text => this.changeTextFn?.(text || 'Atticus')),
+      this.appState.text$.subscribe((text) =>
+        this.changeTextFn?.(text || 'Atticus'),
+      ),
     );
 
     function draw3DText() {
@@ -108,7 +110,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
 
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = '#1a1a22';
       ctx.fillText(textString, cx + 5, cy + 5);
 
       const gradient = ctx.createLinearGradient(
@@ -117,18 +119,22 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         0,
         cy + fontSize / 2,
       );
-      gradient.addColorStop(0, '#050505');
-      gradient.addColorStop(0.3, '#222');
-      gradient.addColorStop(0.5, '#080808');
-      gradient.addColorStop(1, '#000');
+      gradient.addColorStop(0, '#12121c');
+      gradient.addColorStop(0.3, '#2a2a3a');
+      gradient.addColorStop(0.5, '#111118');
+      gradient.addColorStop(1, '#080810');
 
       ctx.fillStyle = gradient;
       ctx.fillText(textString, cx, cy);
 
       ctx.save();
+      if (!isLightning) {
+        ctx.shadowColor = 'rgba(140, 170, 220, 0.25)';
+        ctx.shadowBlur = 12;
+      }
       ctx.fillStyle = isLightning
         ? 'rgba(255,255,255,0.9)'
-        : 'rgba(255,255,255,0.1)';
+        : 'rgba(190,210,240,0.22)';
       ctx.fillText(textString, cx, cy - 1);
       ctx.restore();
     }
@@ -560,10 +566,10 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.font = `900 ${fontSize}px Roboto, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(160, 210, 255, 1)';
-      ctx.shadowBlur = 20 + lightningIntensity * 40;
-      ctx.fillStyle = 'rgba(225, 242, 255, 0.95)';
-      ctx.fillText('Happy Birthday', width / 2, height * 0.2);
+      // ctx.shadowColor = 'rgba(160, 210, 255, 1)';
+      // ctx.shadowBlur = 20 + lightningIntensity * 40;
+      // ctx.fillStyle = 'rgba(225, 242, 255, 3.95)';
+      ctx.fillText('Happy Birthday !!!', width / 2, height * 0.2);
       ctx.restore();
     }
 
@@ -572,10 +578,10 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       const cx = width / 2;
       const cy = height * 0.28;
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, width * 0.7);
-      grad.addColorStop(0,    `rgba(255, 220, 100, ${weather * 0.40})`);
-      grad.addColorStop(0.3,  `rgba(255, 170,  50, ${weather * 0.22})`);
+      grad.addColorStop(0, `rgba(255, 220, 100, ${weather * 0.4})`);
+      grad.addColorStop(0.3, `rgba(255, 170,  50, ${weather * 0.22})`);
       grad.addColorStop(0.65, `rgba(255, 100,  20, ${weather * 0.08})`);
-      grad.addColorStop(1,    'rgba(200, 60, 0, 0)');
+      grad.addColorStop(1, 'rgba(200, 60, 0, 0)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
     }
@@ -617,9 +623,10 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         }
       }
 
-      hbFlicker = (isLightning && lightningIntensity > 0)
-        ? lightningIntensity * (0.55 + Math.random() * 0.45)
-        : Math.max(0, hbFlicker - 0.05);
+      hbFlicker =
+        isLightning && lightningIntensity > 0
+          ? lightningIntensity * (0.55 + Math.random() * 0.45)
+          : Math.max(0, hbFlicker - 0.05);
 
       if (isLightning && lightningIntensity > 0.5 && Math.random() > 0.7) {
         ctx.fillStyle = `rgba(255, 255, 255, ${lightningIntensity * 0.04})`;
@@ -666,12 +673,16 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       this.rafId = requestAnimationFrame(animate);
     };
 
-    this.setWeatherFn = (w: number) => { weather = w; };
+    this.setWeatherFn = (w: number) => {
+      weather = w;
+    };
     this.resizeListener = resize;
     window.addEventListener('resize', this.resizeListener);
     init();
 
-    this.subs.add(this.appState.weather$.subscribe(w => this.setWeatherFn?.(w)));
+    this.subs.add(
+      this.appState.weather$.subscribe((w) => this.setWeatherFn?.(w)),
+    );
   }
 
   ngOnDestroy(): void {

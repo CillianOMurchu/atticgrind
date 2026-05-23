@@ -5,15 +5,22 @@ import { SKATER_PROFILES } from './skater-profiles';
 @Component({
   selector: 'app-skate',
   standalone: true,
-  template: `<canvas #skateCanvas class="skate-canvas"></canvas>`,
+  template: `
+    <canvas
+      #skateCanvas
+      class="skate-canvas"
+      [style.pointer-events]="playing ? 'auto' : 'none'"
+      (click)="onCanvasClick($event)"
+    ></canvas>
+  `,
   styles: [`
     .skate-canvas {
       position: fixed;
       inset: 0;
-      pointer-events: none;
       z-index: 5;
       width: 100vw;
       height: 100vh;
+      cursor: default;
     }
   `],
 })
@@ -23,6 +30,8 @@ export class SkateComponent implements OnInit, OnDestroy {
 
   private rafId = 0;
   private timerId = 0;
+  private skaters: Skater[] = [];
+  playing = false;
 
   ngOnInit(): void {
     this.timerId = window.setTimeout(() => this.play(), 3_000 + Math.random() * 2_000);
@@ -31,6 +40,20 @@ export class SkateComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     clearTimeout(this.timerId);
+  }
+
+  onCanvasClick(event: MouseEvent): void {
+    if (!this.playing) return;
+    const canvas = this.canvasRef.nativeElement;
+    const rect = canvas.getBoundingClientRect();
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+    for (const skater of this.skaters) {
+      if (skater.hitTest(cx, cy)) {
+        skater.knock();
+        break;
+      }
+    }
   }
 
   private scheduleNext(): void {
@@ -60,17 +83,17 @@ export class SkateComponent implements OnInit, OnDestroy {
     const MAX_JH   = 110;
 
     // Sort deepest-first so foreground renders on top
-    const skaters = [...SKATER_PROFILES]
+    this.skaters = [...SKATER_PROFILES]
       .sort((a, b) => b.laneOffset - a.laneOffset)
       .map(p => new Skater(p));
 
-    const TOTAL = Math.max(...skaters.map(s => s.totalFrames));
+    this.playing = true;
     let f = 0;
 
     // Foreground skater (lowest laneOffset after sort) drives the text reveal
-    const fg         = skaters[skaters.length - 1];
-    const fontSize   = Math.min(Math.floor(W * 0.075), 130);
-    const textY      = GROUND_Y * 0.42;
+    const fg       = this.skaters[this.skaters.length - 1];
+    const fontSize = Math.min(Math.floor(W * 0.075), 130);
+    const textY    = GROUND_Y * 0.42;
 
     const easeInOutCubic = (t: number): number =>
       t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -84,7 +107,7 @@ export class SkateComponent implements OnInit, OnDestroy {
       // Dim ghost — hints text exists before reveal
       ctx.globalAlpha = 0.07;
       ctx.fillStyle = '#fff';
-      ctx.fillText('Happy Birthday', W / 2, textY);
+      ctx.fillText('Happy Birthday !!!', W / 2, textY);
 
       // Clipped reveal — expands left-to-right with the foreground skater
       ctx.save();
@@ -95,34 +118,34 @@ export class SkateComponent implements OnInit, OnDestroy {
       ctx.shadowColor = 'rgba(180, 200, 255, 0.5)';
       ctx.shadowBlur = 20;
       ctx.fillStyle = 'rgba(200, 215, 235, 0.95)';
-      ctx.fillText('Happy Birthday', W / 2, textY);
+      ctx.fillText('Happy Birthday !!!', W / 2, textY);
       ctx.restore();
 
       ctx.restore();
     };
 
-    const drawScene = (): void => {};
-
     const tick = (): void => {
       ctx.clearRect(0, 0, W, H);
-      drawScene();
 
       const lf      = f - fg.config.delay;
       const progress = Math.max(0, Math.min(1, lf / fg.config.sequence.duration));
       const revealX  = -60 + (W + 120) * easeInOutCubic(progress);
       drawBirthdayText(revealX);
 
-      for (const skater of skaters) {
+      for (const skater of this.skaters) {
         skater.draw(ctx, f, W, GROUND_Y - skater.config.laneOffset, MAX_JH);
       }
 
       f++;
-      if (f > TOTAL) {
+
+      if (this.skaters.every(s => s.isDone(f))) {
         ctx.clearRect(0, 0, W, H);
         this.rafId = 0;
+        this.playing = false;
         this.scheduleNext();
         return;
       }
+
       this.rafId = requestAnimationFrame(tick);
     };
 
