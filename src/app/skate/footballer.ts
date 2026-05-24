@@ -4,7 +4,7 @@ const BOUNCE   = 0.58;
 
 const WAIT_F         = 40;
 const PLAYER_ENTER_F = 70;
-const KICK_F         = 32;
+const KICK_F         = 44;
 
 type Phase = 'ball_drop' | 'wait' | 'player_enter' | 'kick' | 'chase' | 'done';
 
@@ -16,6 +16,7 @@ function easeOut(t: number): number { return 1 - (1 - t) * (1 - t); }
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
+function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
 
 function seg(
   ctx: CanvasRenderingContext2D,
@@ -72,7 +73,8 @@ export class Footballer {
         this.bvx = 0;
         this.bvy = 0;
         this.by  = this.gY - this.BALL_R;
-        this.playerStopX = this.ballSettledX + 80;
+        // Close enough for the kicking foot to reach the ball
+        this.playerStopX = this.ballSettledX + 30;
       }
     }
   }
@@ -122,12 +124,13 @@ export class Footballer {
       }
 
       case 'kick': {
-        if (pf === 14) {
+        // pf 28: foot near full extension — ball launches
+        if (pf === 28) {
           this.bvx = -20 - Math.random() * 3;
           this.bvy = -9  - Math.random() * 1.5;
           this.ballSpin = 0.55;
         }
-        if (pf >= 14) {
+        if (pf >= 28) {
           this.bx  += this.bvx;
           this.by  += this.bvy;
           this.bvy += GRAVITY;
@@ -222,15 +225,17 @@ export class Footballer {
     const gY = this.gY;
     const pf = this.phaseFrame;
 
-    const ankleY = gY - 8  * s;
-    const kneeY  = gY - 30 * s;
-    const hipY   = gY - 48 * s;
-    const shldrY = gY - 70 * s;
-    const headY  = gY - 84 * s;
+    const ankleY    = gY - 8  * s;
+    const kneeY     = gY - 30 * s;
+    const hipY      = gY - 48 * s;
+    const shldrY    = gY - 70 * s;
+    const headBaseY = gY - 84 * s;
 
-    let run   = 0;
-    let lean  = 0;
-    let kickT = 0;
+    let run        = 0;
+    let lean       = 0;
+    let headDrop   = 0;
+    let backswingT = 0;
+    let strikeT    = 0;
 
     switch (this.phase) {
       case 'player_enter': {
@@ -240,18 +245,26 @@ export class Footballer {
         break;
       }
       case 'kick': {
-        if (pf < 8) {
-          run  = Math.sin(pf * 0.42) * 16 * s;
+        if (pf <= 6) {
+          // Final approach strides
+          run  = Math.sin(pf * 0.42) * 14 * s;
           lean = 6 * s;
+        } else if (pf <= 18) {
+          // Plant and backswing: knee folds back high, ankle rises well above hip
+          lean       = 10 * s;
+          backswingT = Math.sin(((pf - 6) / 12) * Math.PI * 0.5); // ease-in 0→1
+          headDrop   = backswingT * 12 * s; // head nods over ball
+        } else if (pf <= 30) {
+          // Explosive forward strike
+          lean       = 12 * s;
+          backswingT = 1.0;
+          strikeT    = (pf - 18) / 12; // linear 0→1
+          headDrop   = Math.max(0, 1 - strikeT) * 8 * s;
         } else {
-          lean = 8 * s;
-          if (pf < 12) {
-            kickT = -Math.sin(((pf - 8) / 4) * Math.PI * 0.5) * 0.6;
-          } else if (pf < 22) {
-            kickT = Math.sin(((pf - 12) / 10) * Math.PI);
-          } else {
-            kickT = Math.max(0, 1 - (pf - 22) / 10) * 0.3;
-          }
+          // Follow-through and recovery
+          lean       = Math.max(4, 12 - ((pf - 30) / 14) * 8) * s;
+          backswingT = 1.0;
+          strikeT    = 1.0;
         }
         break;
       }
@@ -280,13 +293,28 @@ export class Footballer {
 
     const shldrX = x + 2 * s - lean;
 
-    if (kickT !== 0 || (this.phase === 'kick' && pf >= 8)) {
-      // Kick pose — standing leg right, kicking leg sweeps left
-      seg(ctx, x+5*s, hipY, x+10*s, kneeY, x+8*s, ankleY + 4*s, 5*s, 2.5*s);
-      const kKneeX  = x - 10*s - kickT * 14 * s;
-      const kKneeY  = kneeY     + (kickT < 0 ? kickT * 6 * s : 0);
-      const kAnkleX = x - 16*s - kickT * 32 * s;
-      const kAnkleY = ankleY   + (kickT > 0 ? kickT * 10 * s : kickT * 4 * s);
+    const inKick = (this.phase === 'kick' && pf > 6);
+
+    if (inKick) {
+      // Plant leg (right): foot placed forward toward ball, slightly bent for stability
+      seg(ctx, x+5*s, hipY, x+2*s, kneeY, x-4*s, ankleY, 5*s, 2.5*s);
+
+      // Kicking leg (left): sweeps from neutral → high backswing → explosive strike
+      // Neutral
+      const nKneeX  = x - 5*s,  nKneeY  = kneeY;
+      const nAnkleX = x - 3*s,  nAnkleY = ankleY;
+      // Full backswing: ankle pulled high behind body (above hip level)
+      const bsKneeX  = x + 10*s, bsKneeY  = hipY + 10*s;
+      const bsAnkleX = x + 14*s, bsAnkleY = hipY - 14*s;
+      // Full strike: leg fully extended forward at ball
+      const stKneeX  = x - 22*s, stKneeY  = kneeY - 8*s;
+      const stAnkleX = x - 36*s, stAnkleY = ankleY + 2*s;
+
+      const kKneeX  = lerp(lerp(nKneeX,  bsKneeX,  backswingT), stKneeX,  strikeT);
+      const kKneeY  = lerp(lerp(nKneeY,  bsKneeY,  backswingT), stKneeY,  strikeT);
+      const kAnkleX = lerp(lerp(nAnkleX, bsAnkleX, backswingT), stAnkleX, strikeT);
+      const kAnkleY = lerp(lerp(nAnkleY, bsAnkleY, backswingT), stAnkleY, strikeT);
+
       seg(ctx, x-5*s, hipY, kKneeX, kKneeY, kAnkleX, kAnkleY, 5*s, 2.5*s);
     } else {
       seg(ctx, x-5*s, hipY, x - 14*s, kneeY + run, x - 12*s, ankleY + run * 0.5, 5*s, 2.5*s);
@@ -304,11 +332,12 @@ export class Footballer {
     ctx.lineWidth = 4 * s;
     const shX = shldrX, shY = shldrY + 5 * s;
 
-    if (kickT !== 0 || (this.phase === 'kick' && pf >= 8)) {
-      const spread = Math.abs(kickT) * 14 * s;
-      const lHX = x - 16*s - spread, lHY = shY + 15*s;
+    if (inKick) {
+      // Arms spread wide for rotational balance
+      const spread = clamp(backswingT + strikeT, 0, 1) * 10 * s;
+      const lHX = x - 18*s - spread, lHY = shY + 14*s;
       seg(ctx, shX, shY, (shX + lHX) * 0.5 - 4*s, (shY + lHY) * 0.5 + 3*s, lHX, lHY, 4*s, 2*s);
-      const rHX = x + 16*s + spread, rHY = shY + 15*s;
+      const rHX = x + 18*s + spread, rHY = shY + 14*s;
       seg(ctx, shX, shY, (shX + rHX) * 0.5 + 4*s, (shY + rHY) * 0.5 + 3*s, rHX, rHY, 4*s, 2*s);
     } else {
       const lHX = x - 15*s, lHY = shY + 20*s + run * 0.35;
@@ -317,7 +346,8 @@ export class Footballer {
       seg(ctx, shX, shY, (shX + rHX) * 0.5 + 4*s, (shY + rHY) * 0.5 + 3*s, rHX, rHY, 4*s, 2*s);
     }
 
-    // Head
+    // Head — nods down toward ball during backswing, follows shoulder lean
+    const headY = headBaseY + headDrop;
     ctx.beginPath();
     ctx.arc(shldrX, headY, 9 * s, 0, Math.PI * 2);
     ctx.fill();
