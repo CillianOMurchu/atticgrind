@@ -63,12 +63,11 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let aCharBounds  = { x: 0, y: 0, w: 0, h: 0 };
     let iDotBounds   = { x: 0, y: 0, w: 0, h: 0 };
 
-    type AState = 'idle' | 'pressing' | 'rising' | 'burning' | 'dousing';
+    type AState = 'idle' | 'pressing' | 'rising' | 'burning' | 'dousing' | 'rusty';
     let aState: AState = 'idle';
     let aAnimFrame = 0;
     let aCX = 0, aCY = 0, aStartX = 0, aStartY = 0;
     let aScale = 1;
-    let aAlpha = 1;
     const A_PRESS_F = 14;
     const A_RISE_F  = 48;
     const A_DOUSE_F = 85;
@@ -880,7 +879,6 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
       if (aState === 'dousing') {
         const douseT = Math.min(1, aAnimFrame / A_DOUSE_F);
-        aAlpha = 1 - douseT;
 
         if (douseT < 0.55) {
           const reducedScale = aScale * (1 - douseT * 1.8);
@@ -910,22 +908,86 @@ export class RainComponent implements AfterViewInit, OnDestroy {
           ctx.restore();
         }
 
-        if (aAlpha > 0.01) {
-          ctx.save();
-          ctx.globalAlpha = Math.max(0, aAlpha);
-          ctx.font = `900 ${fontSize * aScale}px Roboto`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.shadowColor = `rgba(50,50,70,${aAlpha * 0.4})`;
-          ctx.shadowBlur  = 14;
-          ctx.fillStyle   = `rgba(70,68,82,${aAlpha})`;
-          ctx.fillText(textString[0], aCX, aCY);
-          ctx.restore();
+        // A colour-transitions from fire-orange → rust brown (no fade)
+        ctx.save();
+        ctx.font = `900 ${fontSize * aScale}px Roboto`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        let colR: number, colG: number, colB: number;
+        if (douseT < 0.4) {
+          const t = douseT / 0.4;
+          colR = 255; colG = Math.floor(170 * (1 - t)); colB = 0;
+        } else {
+          const t = (douseT - 0.4) / 0.6;
+          colR = Math.floor(255 - 116 * t);  // 255→139
+          colG = Math.floor(66 * t);          // 0→66
+          colB = Math.floor(22 * t);          // 0→22
         }
+        ctx.shadowColor = douseT < 0.4
+          ? `rgba(255,80,0,${(1 - douseT / 0.4) * 0.5})`
+          : 'rgba(20,8,2,0.6)';
+        ctx.shadowBlur  = douseT < 0.4 ? 20 * (1 - douseT / 0.4) : 10;
+        ctx.fillStyle   = `rgb(${colR},${colG},${colB})`;
+        ctx.fillText(textString[0], aCX, aCY);
+        ctx.restore();
 
         if (aAnimFrame >= A_DOUSE_F) {
-          aState = 'idle'; aAnimFrame = 0; flamePs = []; aAlpha = 1;
+          aState = 'rusty'; aAnimFrame = 0; flamePs = [];
         }
+        return;
+      }
+
+      if (aState === 'rusty') {
+        ctx.save();
+        ctx.font = `900 ${fontSize * aScale}px Roboto`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const rustGrad = ctx.createLinearGradient(
+          0, aCY - fontSize * aScale * 0.4,
+          0, aCY + fontSize * aScale * 0.4,
+        );
+        rustGrad.addColorStop(0,    '#6B2C0A');
+        rustGrad.addColorStop(0.3,  '#9E4218');
+        rustGrad.addColorStop(0.55, '#B54E1E');
+        rustGrad.addColorStop(0.8,  '#8A3814');
+        rustGrad.addColorStop(1,    '#4E1E06');
+        ctx.shadowColor   = 'rgba(20,8,2,0.85)';
+        ctx.shadowBlur    = 10;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = rustGrad;
+        ctx.fillText(textString[0], aCX, aCY);
+        ctx.restore();
+
+        // Keyhole punched into the A crossbar (lower half, centre of the bar)
+        const keyR   = fontSize * aScale * 0.048;
+        const keyCY  = aCY + fontSize * aScale * 0.115;
+        const slotH  = keyR * 1.55;
+        const slotTW = keyR * 0.68;
+        const slotBW = keyR * 0.38;
+
+        ctx.save();
+        ctx.beginPath();
+        // Circle part
+        ctx.arc(aCX, keyCY, keyR, 0, Math.PI * 2);
+        // Slot part (trapezoid, slightly overlapping the circle bottom)
+        ctx.moveTo(aCX - slotTW / 2, keyCY + keyR * 0.55);
+        ctx.lineTo(aCX - slotBW / 2, keyCY + keyR * 0.55 + slotH);
+        ctx.lineTo(aCX + slotBW / 2, keyCY + keyR * 0.55 + slotH);
+        ctx.lineTo(aCX + slotTW / 2, keyCY + keyR * 0.55);
+        ctx.closePath();
+        // Deep shadow around the hole edge for cast-metal depth
+        ctx.shadowColor = 'rgba(0,0,0,0.98)';
+        ctx.shadowBlur  = keyR * 1.4;
+        ctx.fillStyle   = '#07050A';
+        ctx.fill();
+        // Subtle warm rim highlight (oxidised metal edge)
+        ctx.shadowBlur  = 0;
+        ctx.strokeStyle = 'rgba(195,135,55,0.4)';
+        ctx.lineWidth   = Math.max(1, keyR * 0.11);
+        ctx.stroke();
+        ctx.restore();
+
         return;
       }
     }
@@ -1013,6 +1075,10 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
       drawSunnyOverlay();
       drawHappyBirthday();
+
+      // Douse the burning A when rain is cranked to maximum
+      if (aState === 'burning' && weather <= 0.02) triggerADouse();
+
       tickAAnimation();
 
       this.rafId = requestAnimationFrame(animate);
@@ -1039,8 +1105,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
         return;
       }
 
-      // 'A' — fire/douse animation
-      if (aState === 'burning') { triggerADouse(); return; }
+      // 'A' — fire animation (douse is triggered by max rain, not click)
       if (aState !== 'idle') return;
       if (
         cx >= aCharBounds.x && cx <= aCharBounds.x + aCharBounds.w &&
