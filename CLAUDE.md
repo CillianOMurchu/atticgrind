@@ -1,114 +1,149 @@
-# Claude Code — Atticus project
-
-## Read This First
-
-- **README.md** — project overview and live feature index
-- **docs/ARCHITECTURE.md** — system design, data flow, sphere algorithm details
-- **docs/STYLE_GUIDE.md** — TypeScript patterns, CSS conventions, naming rules
-- **docs/TROUBLESHOOTING.md** — known bugs and their exact locations
-
-Do not read individual source files to re-learn the project. Use these docs.
-
----
+# Claude Code — Atticgrind project
 
 ## Project Identity
 
-Personal portfolio for Cillian Ó Murchú. Live at `cillianomurchu.vercel.app`.
-React 18 + TypeScript + Vite + Tailwind + Framer Motion. No SSR. No global state library.
+Personal creative project for Cillian Ó Murchú.
+**Angular 19** · TypeScript 5.7 · RxJS 7 · Three.js r162 · Angular CLI · Karma/Jasmine.
+No SSR. No state library — global state lives in `AppStateService` via `BehaviorSubject`.
 
 ---
 
-## File Structure Rules
+## File Structure
 
 ```
-src/pages/           Route-level screens only. One file per route.
-src/components/      Reusable UI. Feature folders for co-located logic.
-  sphere/            All canvas sphere logic lives here. Do not split out.
-  name/              Name widget and its sub-components. Do not split out.
-  HeroTitle/         HeroTitle component + its CSS file.
-  layout/            Navbar, Footer only.
-  navigation/        Mobile menu components only.
-  ui/                Stateless presentational atoms.
-src/context/         React context providers only.
-src/data/            Static data files (no API calls).
-src/hooks/           General-purpose hooks. Sphere-specific hooks live in sphere/.
-src/utils/           Pure functions. Sphere-specific utils live in sphere/.
-src/styles/          theme.css only. No new CSS files here.
-```
+src/app/
+  app.component.ts/html/scss   Root shell — mounts navbar, skate, banner, router-outlet
+  app.config.ts                provideRouter + provideZoneChangeDetection
+  app.routes.ts                Routes (currently just '/' → HomeComponent)
 
-**When adding a new feature:** If it has more than 2 related files, give it a `components/<feature>/` folder. Keep hook, util, type, and component files co-located inside that folder.
+  home/                        Route-level screen. Contains background image + <app-rain>
+  navbar/                      Fixed top bar, z-index 10
+  banner/                      Canvas banner animation (skater carrying sign), z-index 4
+  skate/                       Canvas skater animation, fixed, pointer-events:none, z-index 5
+    skate.component.ts         Animation loop, renders Skater using FrameState
+    skate-moves.ts             Defines Move/Sequence types and exports roll, ollie, kickflip, shuvit, handstand, compose
+    skater.ts                  Skater class — drawBody(ctx, state) stick-figure renderer
+    skater-profiles.ts         Skater appearance configs
+    climber.ts                 Climber character
+    footballer.ts              Footballer character
+    banner-message.ts          Text string shown on the banner canvas
+  rain/                        Full-screen canvas rain + "Atticus" text + interactive flame animation
+    rain.component.ts          All rain logic (drops, splashes, lightning, clouds, 3D text, A-fire animation)
+    rain.component.html        <canvas #rainCanvas> inside overflow-hidden div
+    rain.component.scss        canvas { display:block; position:absolute; top:0; left:0 }
+  neural-network/              WebGL shader visualisation (currently commented out in app shell)
+  components/
+    neural-network/            Alternative neural-network component
+  services/
+    app-state.service.ts       AppStateService — text$ and weather$ BehaviorSubjects
+  ui/
+    button/                    Presentational button atom
+    input/                     Presentational input atom
+```
 
 ---
 
-## Import Path Conventions
+## Angular Conventions
 
-Always use relative imports. No path aliases configured.
-
-```
-From src/pages/           → ../components/..., ../hooks/..., ../utils/..., ../data/...
-From src/components/xyz/  → ../../context/..., ../../hooks/..., ../../utils/...
-From src/components/sphere/ → ./[file]  (all sphere deps are siblings)
-From src/components/name/   → ./[file]  (all name deps are siblings)
-```
-
-Vite glob import in `sphere/iconLoader.ts` uses `"../../assets/programming-icons/*.svg"` — if iconLoader.ts moves, this path must update.
+- **Standalone components only.** Every component uses `standalone: true` and declares its own `imports: []`. Do not use NgModules.
+- **Inject via `inject()`**, not constructor injection, for new code. Existing components use constructor injection — match what's already there.
+- **Canvas setup in `ngAfterViewInit`**, not `ngOnInit`, because `@ViewChild({ static: true })` resolves before `ngAfterViewInit` but the canvas sizing depends on the DOM being ready.
+- **All animation state is closure-scoped** inside `ngAfterViewInit`. Do not add class fields for per-frame variables — keep them local to the setup function.
+- **Clean up in `ngOnDestroy`**: cancel `requestAnimationFrame` (store the id in a class field), `window.removeEventListener`, unsubscribe from RxJS subs via `this.subs.unsubscribe()`. Every component that sets up a loop must tear it down.
+- **RxJS subscriptions**: collect with `this.subs = new Subscription()` and `this.subs.add(...)`. Unsubscribe in `ngOnDestroy`.
+- **AppStateService**: inject with `private readonly appState = inject(AppStateService)`. Subscribe to `text$` and `weather$` for cross-component state.
 
 ---
 
-## Key Patterns
+## Canvas Animation Patterns
 
-**Animation variants:** Always import from `utils/animations.ts`. Do not define local variants for scroll-triggered animations — add to `scrollVariants` there instead.
-
-**CSS styling:** Use `theme.css` utility classes (`.neon`, `.text-accent`, `.border-accent-subtle`, `.surface`, `.timeline-card-*`, etc.) before writing inline styles. CSS custom properties are in `styles/theme.css`. Tailwind is not extended via config — custom classes live in `theme.css`.
-
-**Info boxes:** Use `components/ui/InfoBox.tsx` (generic). Pass `text` (full string) and optionally `displayedText` (partial, for typing cursor). `className` accepts positional and sizing overrides. Do not recreate info-box styling inline.
-
-**Component size:** Keep components under 150 lines. If a component grows beyond that, extract sub-components into the same folder.
-
-**No new dependencies** without a clear reason. The bundle was already cleaned of ~650KB of unused deps (three.js, react-hook-form, etc.).
+- Overlay canvases (skate, banner) use `position: fixed; pointer-events: none` so click events fall through to the rain canvas.
+- The rain canvas sits inside the home component, not fixed — it fills the viewport via CSS.
+- `canvas.width = window.innerWidth; canvas.height = window.innerHeight` inside a `resize()` function, called on `window.addEventListener('resize', ...)` and on init. Store the listener ref to remove it in `ngOnDestroy`.
+- `hitCanvas` pattern in rain: an off-screen canvas used for pixel-perfect collision detection without reading back from the main canvas on every frame.
+- Flame particles use `ctx.globalCompositeOperation = 'lighter'` (additive blending) for natural fire glow — overlapping particles brighten each other.
 
 ---
 
 ## Commands
 
 ```bash
-npm run dev           # dev server
-npm run build         # tsc + vite build — run this after structural changes
-npm run test:run      # vitest single run
+npm start          # ng serve — dev server at localhost:4200
+npm run build      # ng build — production build, also catches type errors
+npm test           # ng test — Karma/Jasmine unit tests
 ```
 
-After any significant change, run `npm run build` to catch type errors.
+Run `npm run build` after any structural change to catch TypeScript errors early.
 
 ---
 
 ## What NOT To Do
 
-- Do not add files to `src/utils/` or `src/hooks/` if they belong to a feature (sphere, name, etc.). Co-locate instead.
-- Do not define animation variants locally in a component — use `utils/animations.ts`.
-- Do not create a new CSS file. Add classes to `theme.css` or use Tailwind utilities.
-- Do not use `any` types. The Twitch player interface pattern in `Streaming.tsx` shows how to type external scripts.
+- Do not create NgModules. This project is fully standalone-component.
+- Do not add class fields for animation loop variables — keep them closure-scoped in `ngAfterViewInit`.
+- Do not forget `ngOnDestroy` cleanup for any component that starts a `requestAnimationFrame` loop, adds a `window` listener, or opens an RxJS subscription.
+- Do not use `any` types. Type canvas contexts as `CanvasRenderingContext2D` (cast from `getContext`).
 - Do not add `console.log` to production code.
-- Do not use wildcard versions in `package.json` (was fixed — `clsx` and `tailwind-merge` are now pinned).
-- Do not install Three.js — the sphere is canvas-based, not Three.js.
+- Do not touch `neural-network.shaders.ts` without expecting pre-existing TypeScript errors there — they are known and unrelated to other features.
+- Do not split a simple canvas animation across multiple files. Keep component logic co-located in its feature folder.
 
 ---
 
-## Known Issues to Be Aware Of
+# Three.js Project Guide
 
-See **docs/TROUBLESHOOTING.md** for the full list. Critical ones:
+Conventions for Three.js work in this repo. Three.js r162 is installed as a package dependency.
 
-1. **HeroTitle buttons have no `onClick`** — `selectedItem` in HomeScreen is never set by user interaction. The description panel below the hero is currently unreachable. Do not assume it works.
-2. **CSS class name mismatch** — `Navbar.tsx` uses `border-bottom-neon`, `MobileMenuPanel.tsx` uses `border-left-neon`, but `theme.css` defines `border-neon-bottom` / `border-neon-left`. The borders don't render.
-3. **`useElementCenter` is dead code** — superseded by OrbOriginContext, do not build on top of it.
+## Versions & APIs
 
----
+- Three.js **r162** is the installed version. Do not suggest pre-r125 patterns.
+- `Geometry` was removed in r125. Only `BufferGeometry` exists. Never write `new THREE.Geometry()`.
+- `CapsuleGeometry` (r142+), `TubeGeometry`, etc. are available on `BufferGeometry` helpers.
+- Renderer color management changed in r152: `THREE.ColorManagement.enabled` is on by default; assume sRGB output. Don't set `outputEncoding` (removed); use `renderer.outputColorSpace = THREE.SRGBColorSpace` if explicit.
+- `WebGLRenderer` is the default. Use `WebGPURenderer` (`import * as THREE from 'three/webgpu'`) only when the task asks for it or when GPU compute / large instancing is the bottleneck. WebGPU init is **async** — `await renderer.init()` before the first render.
+- Prefer TSL (`three/tsl`) over GLSL strings for new shader work in WebGPU contexts. For WebGL, `ShaderMaterial` with GLSL is fine.
 
-## Agent Workflow
+## Imports
 
-For non-trivial changes, use this sequence:
-1. `/plan` — agree on approach before touching files
-2. Implement
-3. `/project:verify` — runs build and type check, reports errors
-4. `/review` — code review of the diff
+- Always tree-shakeable named imports: `import { Scene, Mesh, MeshStandardMaterial } from 'three'` — not `import * as THREE`. Exception: `three/webgpu` and `three/tsl` are namespace-imported by convention.
+- Addons live under `three/addons/...` (e.g. `three/addons/controls/OrbitControls.js`), not `three/examples/jsm/...`. Both resolve, but `three/addons` is the documented path.
 
-For large refactors or anything touching the sphere feature, always run verify after.
+## Defaults to use without asking
+
+- `MeshStandardMaterial` for PBR, `MeshBasicMaterial` for unlit. Don't reach for `MeshPhongMaterial` or `MeshLambertMaterial` unless specified.
+- `PerspectiveCamera(50, w/h, 0.1, 100)` as the starting point; widen near/far only when scene scale demands it.
+- `renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))` — uncapped DPR tanks perf on retina.
+- Always add a `resize` handler that updates both camera aspect and renderer size.
+- Use `renderer.setAnimationLoop(fn)` over manual `requestAnimationFrame` — required for WebXR and works identically otherwise.
+
+## Performance — apply by default
+
+- **Instancing over loops.** >50 of the same mesh → `InstancedMesh`. Don't generate a loop of `scene.add(mesh.clone())`.
+- **Reuse geometries and materials.** One geometry, one material, many meshes. Cloning materials kills batching.
+- **Dispose on teardown.** Any scene created in an Angular component must dispose geometries, materials, and textures in `ngOnDestroy`.
+- **Frustum culling is on by default** — don't disable it without reason.
+- **Shadows are expensive.** Only enable `castShadow`/`receiveShadow` on objects that need it; prefer `PCFSoftShadowMap` with a tight `shadow.camera` frustum.
+- Avoid per-frame allocations inside the animation loop. Reuse `Vector3`/`Quaternion`/`Matrix4` instances declared outside the loop.
+
+## Code style
+
+- **One file unless asked.** No unnecessary splits for demos under ~100 lines.
+- Comments explain *why*, not *what*. `// reuse to avoid per-frame allocation` yes; `// create a vector` no.
+- Numeric literals get units in comments when ambiguous: `0.016 // ~60fps delta in seconds`.
+
+## Common traps to avoid
+
+- `lookAt` after `position.set` — order matters; `lookAt` reads current position.
+- Forgetting `material.needsUpdate = true` after changing textures or defines.
+- Loading textures synchronously — always use the callback or `await loader.loadAsync()`.
+- Using `THREE.Clock().getDelta()` and `getElapsedTime()` on different clock instances expecting consistency.
+- Mixing radians and degrees. Three.js is radians everywhere; `MathUtils.degToRad()` exists.
+- Setting `renderer.setSize()` without updating `camera.aspect` and calling `camera.updateProjectionMatrix()`.
+
+## When to ask vs. assume
+
+Ask only if the answer materially changes the code:
+- Target renderer (WebGL vs WebGPU) **if** the task involves shaders or compute.
+- Specific model formats (GLTF/GLB is the default; OBJ/FBX/USDZ → ask).
+- Whether physics is needed (don't add Rapier/Cannon unless requested).
+
+Otherwise, make the reasonable choice and state the assumption in one line.

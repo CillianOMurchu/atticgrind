@@ -61,16 +61,21 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let weather = 0; // 0 = full storm, 1 = sunny
 
     let aCharBounds = { x: 0, y: 0, w: 0, h: 0 };
-    let swordFrame = -1;
-    let slashFade = 0;
-    const SWORD_ANGLE = -Math.PI / 5.5;
-    const SWORD_THRUST_F = 9;
-    const SWORD_HOLD_F = 22;
-    const SWORD_WITHDRAW_F = 10;
-    const SWORD_TOTAL_F = SWORD_THRUST_F + SWORD_HOLD_F + SWORD_WITHDRAW_F;
-    const SWORD_SLASH_FADE = 30;
 
-    function swordEase(t: number): number {
+    type AState = 'idle' | 'pressing' | 'rising' | 'burning' | 'dousing';
+    let aState: AState = 'idle';
+    let aAnimFrame = 0;
+    let aCX = 0, aCY = 0, aStartX = 0, aStartY = 0;
+    let aScale = 1;
+    let aAlpha = 1;
+    const A_PRESS_F = 14;
+    const A_RISE_F  = 48;
+    const A_DOUSE_F = 85;
+
+    type FlameP = { x: number; y: number; vx: number; vy: number; life: number; decay: number; r: number; steam?: boolean; };
+    let flamePs: FlameP[] = [];
+
+    function aEase(t: number): number {
       return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     }
 
@@ -161,19 +166,34 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.fillText(textString, cx, cy - 1);
       ctx.restore();
 
-      // Flashing red 'A' — first character of textString
-      if (textString.length > 0) {
+      // Flashing red 'A' — only when idle or pressing (animation takes over otherwise)
+      if (textString.length > 0 && (aState === 'idle' || aState === 'pressing')) {
         const totalW  = ctx.measureText(textString).width;
         const firstCh = textString[0];
         const charX   = cx - totalW / 2;
-        const pulse   = 0.5 + 0.5 * Math.sin(frameCount * 0.07);
         ctx.save();
         ctx.textAlign    = 'left';
         ctx.textBaseline = 'middle';
-        ctx.shadowColor  = `rgba(255, 20, 20, ${0.6 + pulse * 0.4})`;
-        ctx.shadowBlur   = 16 + pulse * 32;
-        ctx.fillStyle    = `rgba(${Math.round(200 + pulse * 55)}, ${Math.round(15 + pulse * 20)}, ${Math.round(15 + pulse * 20)}, ${0.8 + pulse * 0.2})`;
-        ctx.fillText(firstCh, charX, cy - 1);
+        if (aState === 'pressing') {
+          const pressT = aAnimFrame < A_PRESS_F / 2
+            ? aAnimFrame / (A_PRESS_F / 2)
+            : 1 - (aAnimFrame - A_PRESS_F / 2) / (A_PRESS_F / 2);
+          const charW  = ctx.measureText(firstCh).width;
+          const midX   = charX + charW / 2;
+          ctx.translate(midX, cy);
+          ctx.scale(1 - pressT * 0.12, 1 - pressT * 0.12);
+          ctx.translate(-midX, -cy);
+          ctx.shadowColor = `rgba(255, 240, 200, ${0.5 + pressT * 0.5})`;
+          ctx.shadowBlur  = 8 + pressT * 40;
+          ctx.fillStyle   = `rgba(255, ${Math.floor(200 + pressT * 55)}, ${Math.floor(pressT * 80)}, ${0.7 + pressT * 0.3})`;
+          ctx.fillText(firstCh, charX, cy + pressT * 2);
+        } else {
+          const pulse   = 0.5 + 0.5 * Math.sin(frameCount * 0.07);
+          ctx.shadowColor  = `rgba(255, 20, 20, ${0.6 + pulse * 0.4})`;
+          ctx.shadowBlur   = 16 + pulse * 32;
+          ctx.fillStyle    = `rgba(${Math.round(200 + pulse * 55)}, ${Math.round(15 + pulse * 20)}, ${Math.round(15 + pulse * 20)}, ${0.8 + pulse * 0.2})`;
+          ctx.fillText(firstCh, charX, cy - 1);
+        }
         ctx.restore();
       }
     }
@@ -625,137 +645,271 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.fillRect(0, 0, width, height);
     }
 
-    function triggerSword() {
-      if (swordFrame >= 0) return;
-      swordFrame = 0;
+    function triggerAFire(): void {
+      if (aState !== 'idle') return;
+      aState = 'pressing';
+      aAnimFrame = 0;
     }
 
-    function drawSword() {
-      const pcx = width / 2;
-      const pcy = height * 0.45;
-      const cos = Math.cos(SWORD_ANGLE);
-      const sin = Math.sin(SWORD_ANGLE);
-      const tipLen = height * 0.5;
-      const pommelLen = height * 0.13;
+    function triggerADouse(): void {
+      if (aState !== 'burning') return;
+      aState = 'dousing';
+      aAnimFrame = 0;
+    }
 
-      if (slashFade > 0) {
-        slashFade--;
-        const ft = slashFade / SWORD_SLASH_FADE;
-        const tx = pcx + cos * tipLen, ty = pcy + sin * tipLen;
-        const px = pcx - cos * pommelLen, py = pcy - sin * pommelLen;
-        ctx.save();
-        const slGrad = ctx.createLinearGradient(px, py, tx, ty);
-        slGrad.addColorStop(0, `rgba(100, 170, 255, 0)`);
-        slGrad.addColorStop(0.5, `rgba(180, 220, 255, ${ft * 0.35})`);
-        slGrad.addColorStop(1, `rgba(255, 255, 255, 0)`);
-        ctx.strokeStyle = slGrad;
-        ctx.lineWidth = 1.5;
-        ctx.shadowColor = `rgba(150, 200, 255, ${ft * 0.5})`;
-        ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.stroke();
-        ctx.restore();
+    function spawnFlamePs(cx: number, cy: number, scale: number, count: number, fastDecay = false): void {
+      const fontSize = Math.min(Math.max(width * 0.22, 120), 400);
+      const aH = fontSize * scale * 0.5;
+      const aW = fontSize * scale * 0.4;
+      for (let i = 0; i < count; i++) {
+        const rx = (Math.random() - 0.5) * aW;
+        const ry = (Math.random() * 0.7 - 0.2) * aH;
+        const speed = (1.5 + Math.random() * 4.5) * Math.max(0.7, scale * 0.55);
+        flamePs.push({
+          x: cx + rx, y: cy + ry,
+          vx: (Math.random() - 0.5) * 2.5,
+          vy: -speed,
+          life: 1.0,
+          decay: fastDecay ? 0.055 + Math.random() * 0.08 : 0.011 + Math.random() * 0.015,
+          r: (5 + Math.random() * 18) * Math.max(0.5, scale * 0.45),
+        });
       }
+    }
 
-      if (swordFrame < 0) return;
-
-      const f = swordFrame++;
-      if (f >= SWORD_TOTAL_F) { swordFrame = -1; slashFade = SWORD_SLASH_FADE; return; }
-
-      let bladeT: number;
-      let phase: 'thrust' | 'hold' | 'withdraw';
-      if (f < SWORD_THRUST_F) {
-        phase = 'thrust';
-        bladeT = swordEase(f / SWORD_THRUST_F);
-      } else if (f < SWORD_THRUST_F + SWORD_HOLD_F) {
-        phase = 'hold';
-        bladeT = 1;
-      } else {
-        phase = 'withdraw';
-        bladeT = 1 - swordEase((f - SWORD_THRUST_F - SWORD_HOLD_F) / SWORD_WITHDRAW_F);
+    function spawnSteamPs(cx: number, cy: number, scale: number): void {
+      const fontSize = Math.min(Math.max(width * 0.22, 120), 400);
+      const aH = fontSize * scale * 0.5;
+      const aW = fontSize * scale * 0.4;
+      for (let i = 0; i < 5; i++) {
+        flamePs.push({
+          x: cx + (Math.random() - 0.5) * aW * 1.2,
+          y: cy + (Math.random() - 0.5) * aH,
+          vx: (Math.random() - 0.5) * 1.2,
+          vy: -(0.4 + Math.random() * 1.8),
+          life: 0.45 + Math.random() * 0.4,
+          decay: 0.007 + Math.random() * 0.005,
+          r: 12 + Math.random() * 22,
+          steam: true,
+        });
       }
+    }
 
-      const tX = pcx + cos * tipLen * bladeT;
-      const tY = pcy + sin * tipLen * bladeT;
-      const pX = pcx - cos * pommelLen * bladeT;
-      const pY = pcy - sin * pommelLen * bladeT;
+    function tickFlamePs(dousing = false): void {
+      for (let i = flamePs.length - 1; i >= 0; i--) {
+        const p = flamePs[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx += (Math.random() - 0.5) * 0.55;
+        p.vy *= 0.976;
+        p.r  *= 0.997;
+        p.life -= (dousing && !p.steam) ? p.decay * 3.5 : p.decay;
+        if (p.life <= 0) flamePs.splice(i, 1);
+      }
+    }
 
+    function drawFlamePs(): void {
+      if (flamePs.length === 0) return;
+      // Steam pass — normal blending, white/grey
       ctx.save();
-
-      if (phase === 'thrust' && f === 0) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.fillRect(0, 0, width, height);
-      }
-
-      if (phase === 'thrust') {
-        const sf = (1 - f / SWORD_THRUST_F) * 0.5;
-        ctx.save();
-        ctx.strokeStyle = `rgba(200, 228, 255, ${sf})`;
-        ctx.lineWidth = 0.8;
-        ctx.lineCap = 'round';
-        for (let i = 0; i < 12; i++) {
-          const a = (i / 12) * Math.PI * 2;
-          const r1 = 10 + Math.random() * 12;
-          const r2 = r1 + 25 + Math.random() * 45;
-          ctx.beginPath();
-          ctx.moveTo(pcx + Math.cos(a) * r1, pcy + Math.sin(a) * r1);
-          ctx.lineTo(pcx + Math.cos(a) * r2, pcy + Math.sin(a) * r2);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-
-      if (bladeT > 0.01) {
-        ctx.save();
-        const glowG = ctx.createLinearGradient(pX, pY, tX, tY);
-        glowG.addColorStop(0, 'rgba(100, 160, 255, 0)');
-        glowG.addColorStop(0.25, 'rgba(160, 210, 255, 0.25)');
-        glowG.addColorStop(0.75, 'rgba(220, 242, 255, 0.4)');
-        glowG.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
-        ctx.strokeStyle = glowG;
-        ctx.lineWidth = 16;
-        ctx.lineCap = 'round';
-        ctx.shadowColor = 'rgba(140, 200, 255, 0.7)';
-        ctx.shadowBlur = 22;
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath(); ctx.moveTo(pX, pY); ctx.lineTo(tX, tY); ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        const bladeG = ctx.createLinearGradient(pX, pY, tX, tY);
-        bladeG.addColorStop(0, 'rgba(160, 195, 225, 0.85)');
-        bladeG.addColorStop(0.45, 'rgba(245, 252, 255, 0.98)');
-        bladeG.addColorStop(0.82, 'rgba(215, 235, 255, 0.92)');
-        bladeG.addColorStop(1, 'rgba(255, 255, 255, 0.65)');
-        ctx.strokeStyle = bladeG;
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = 'round';
-        ctx.shadowColor = 'rgba(200, 225, 255, 1)';
-        ctx.shadowBlur = 7;
-        ctx.beginPath(); ctx.moveTo(pX, pY); ctx.lineTo(tX, tY); ctx.stroke();
-        ctx.restore();
-      }
-
-      const ba = phase === 'hold' ? 0.7 + 0.2 * Math.sin(f * 0.55) : bladeT;
-      ctx.save();
-      ctx.fillStyle = `rgba(255, 255, 255, ${ba * 0.95})`;
-      ctx.shadowColor = 'rgba(180, 220, 255, 1)';
-      ctx.shadowBlur = 20;
-      ctx.beginPath(); ctx.arc(pcx, pcy, 3 * Math.max(0.3, bladeT), 0, Math.PI * 2); ctx.fill();
-      if (bladeT > 0.1 && (phase === 'thrust' || (phase === 'hold' && f < SWORD_THRUST_F + 6))) {
-        ctx.strokeStyle = `rgba(255, 255, 255, ${ba * 0.7})`;
-        ctx.lineWidth = 1;
-        ctx.lineCap = 'round';
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2;
-          ctx.beginPath();
-          ctx.moveTo(pcx, pcy);
-          ctx.lineTo(pcx + Math.cos(a) * 8 * bladeT, pcy + Math.sin(a) * 8 * bladeT);
-          ctx.stroke();
-        }
+      for (const p of flamePs) {
+        if (!p.steam) continue;
+        ctx.globalAlpha = p.life * 0.38;
+        ctx.fillStyle = 'rgb(200,212,225)';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(1, p.r * (0.4 + p.life * 0.6)), 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.restore();
-
+      // Fire pass — additive blending (overlaps brighten naturally)
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of flamePs) {
+        if (p.steam) continue;
+        const l = p.life;
+        let r: number, g: number, b: number;
+        if (l > 0.65) {
+          const t = (l - 0.65) / 0.35;
+          r = 255; g = Math.floor(185 + t * 70); b = Math.floor(t * 90);
+        } else if (l > 0.3) {
+          const t = (l - 0.3) / 0.35;
+          r = 255; g = Math.floor(t * 185); b = 0;
+        } else {
+          const t = l / 0.3;
+          r = Math.floor(80 + t * 175); g = 0; b = 0;
+        }
+        ctx.globalAlpha = l * 0.65;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(1, p.r * l), 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
+    }
+
+    function tickAAnimation(): void {
+      if (aState === 'idle') return;
+
+      const fontSize = Math.min(Math.max(width * 0.22, 120), 400);
+      ctx.font = `900 ${fontSize}px Roboto`;
+      const totalW = textString.length > 0 ? ctx.measureText(textString).width : 0;
+      const aW     = textString.length > 0 ? ctx.measureText(textString[0]).width : 0;
+      const textCX = width / 2;
+      const textCY = height * (4 / 5);
+      const charMidX = textCX - totalW / 2 + aW / 2;
+
+      const targetX     = width / 2;
+      const targetY     = height * 0.42;
+      const targetScale = 2.4;
+
+      aAnimFrame++;
+
+      if (aState === 'pressing') {
+        if (aAnimFrame >= A_PRESS_F) {
+          aState = 'rising';
+          aAnimFrame = 0;
+          aStartX = charMidX;
+          aStartY = textCY;
+          aCX = aStartX;
+          aCY = aStartY;
+          aScale = 1;
+        }
+        return;
+      }
+
+      if (aState === 'rising') {
+        const t = aEase(Math.min(1, aAnimFrame / A_RISE_F));
+        aCX   = aStartX + (targetX - aStartX) * t;
+        aCY   = aStartY + (targetY - aStartY) * t;
+        aScale = 1 + (targetScale - 1) * t;
+
+        if (aAnimFrame > A_RISE_F * 0.4) {
+          spawnFlamePs(aCX, aCY, aScale * 0.5, 5);
+        }
+        tickFlamePs();
+        drawFlamePs();
+
+        ctx.save();
+        ctx.font = `900 ${fontSize * aScale}px Roboto`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const rp = 0.5 + 0.5 * Math.sin(aAnimFrame * 0.3);
+        ctx.shadowColor = `rgba(255, 90, 0, ${0.5 + rp * 0.5})`;
+        ctx.shadowBlur  = 18 + rp * 28;
+        ctx.fillStyle   = `rgba(255, ${Math.floor(50 + rp * 70)}, 0, 0.9)`;
+        ctx.fillText(textString[0], aCX, aCY);
+        ctx.restore();
+
+        if (aAnimFrame >= A_RISE_F) {
+          aState = 'burning';
+          aAnimFrame = 0;
+          aCX = targetX; aCY = targetY; aScale = targetScale;
+          spawnFlamePs(aCX, aCY, aScale, 100);
+        }
+        return;
+      }
+
+      if (aState === 'burning') {
+        const pulse = 0.5 + 0.5 * Math.sin(aAnimFrame * 0.09);
+
+        // Background glow
+        const glowR = fontSize * aScale * 0.88;
+        ctx.save();
+        const glow = ctx.createRadialGradient(aCX, aCY, 0, aCX, aCY, glowR);
+        glow.addColorStop(0,   `rgba(255,110,0,${0.22 + pulse * 0.14})`);
+        glow.addColorStop(0.5, `rgba(200,40,0,${0.1  + pulse * 0.07})`);
+        glow.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(aCX, aCY, glowR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        spawnFlamePs(aCX, aCY, aScale, 16);
+        tickFlamePs();
+        drawFlamePs();
+
+        ctx.save();
+        ctx.font = `900 ${fontSize * aScale}px Roboto`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = `rgba(255,100,0,${0.6 + pulse * 0.4})`;
+        ctx.shadowBlur  = 28 + pulse * 48;
+        ctx.fillStyle   = `rgb(255,${Math.floor(65 + pulse * 105)},0)`;
+        ctx.fillText(textString[0], aCX, aCY);
+        ctx.restore();
+
+        // Expanding shockwave ring on ignition
+        if (aAnimFrame <= 14) {
+          const sf    = 1 - aAnimFrame / 14;
+          const ringR = fontSize * aScale * 0.4 * (1 + (1 - sf) * 3.2);
+          ctx.save();
+          ctx.strokeStyle = `rgba(255,210,60,${sf * 0.8})`;
+          ctx.lineWidth   = 4 * sf;
+          ctx.shadowColor = `rgba(255,180,0,${sf})`;
+          ctx.shadowBlur  = 24;
+          ctx.beginPath();
+          ctx.arc(aCX, aCY, ringR, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        if (aAnimFrame === 1) {
+          ctx.fillStyle = 'rgba(255,140,0,0.16)';
+          ctx.fillRect(0, 0, width, height);
+        }
+        return;
+      }
+
+      if (aState === 'dousing') {
+        const douseT = Math.min(1, aAnimFrame / A_DOUSE_F);
+        aAlpha = 1 - douseT;
+
+        if (douseT < 0.55) {
+          const reducedScale = aScale * (1 - douseT * 1.8);
+          const reducedCount = Math.floor(14 * (1 - douseT * 2));
+          if (reducedCount > 0) spawnFlamePs(aCX, aCY, reducedScale, reducedCount, true);
+        }
+        spawnSteamPs(aCX, aCY, aScale);
+        tickFlamePs(true);
+        drawFlamePs();
+
+        // Focused rain in the flame area
+        if (douseT < 0.75) {
+          const dh = fontSize * aScale * 0.55;
+          const dw = fontSize * aScale * 0.4;
+          ctx.save();
+          ctx.strokeStyle = `rgba(175,215,240,${(1 - douseT) * 0.85})`;
+          ctx.lineWidth = 1.2;
+          for (let i = 0; i < 20; i++) {
+            const rx = (Math.random() - 0.5) * dw * 2.8;
+            const ry = (Math.random() - 0.5) * dh * 2.8;
+            const dl = 8 + Math.random() * 12;
+            ctx.beginPath();
+            ctx.moveTo(aCX + rx, aCY + ry);
+            ctx.lineTo(aCX + rx + dl * 0.09, aCY + ry + dl);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        if (aAlpha > 0.01) {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, aAlpha);
+          ctx.font = `900 ${fontSize * aScale}px Roboto`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = `rgba(50,50,70,${aAlpha * 0.4})`;
+          ctx.shadowBlur  = 14;
+          ctx.fillStyle   = `rgba(70,68,82,${aAlpha})`;
+          ctx.fillText(textString[0], aCX, aCY);
+          ctx.restore();
+        }
+
+        if (aAnimFrame >= A_DOUSE_F) {
+          aState = 'idle'; aAnimFrame = 0; flamePs = []; aAlpha = 1;
+        }
+        return;
+      }
     }
 
     function init() {
@@ -841,7 +995,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
       drawSunnyOverlay();
       drawHappyBirthday();
-      drawSword();
+      tickAAnimation();
 
       this.rafId = requestAnimationFrame(animate);
     };
@@ -853,17 +1007,21 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     window.addEventListener('resize', this.resizeListener);
 
     this.clickListener = (e: MouseEvent) => {
+      if (aState === 'burning') {
+        triggerADouse();
+        return;
+      }
+      if (aState !== 'idle') return;
       const rect = canvas.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
-      console.log('click', { cx, cy, bounds: { ...aCharBounds } });
       if (
         cx >= aCharBounds.x &&
         cx <= aCharBounds.x + aCharBounds.w &&
         cy >= aCharBounds.y &&
         cy <= aCharBounds.y + aCharBounds.h
       ) {
-        triggerSword();
+        triggerAFire();
       }
     };
     canvas.addEventListener('click', this.clickListener);
