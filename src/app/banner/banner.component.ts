@@ -24,7 +24,7 @@ export class BannerComponent implements OnInit, OnDestroy {
   private timerId = 0;
 
   ngOnInit(): void {
-    this.timerId = window.setTimeout(() => this.run(), 8_000 + Math.random() * 4_000);
+    this.timerId = window.setTimeout(() => this.run(), 24_000);
   }
 
   ngOnDestroy(): void {
@@ -33,8 +33,7 @@ export class BannerComponent implements OnInit, OnDestroy {
   }
 
   private scheduleNext(): void {
-    const delay = 30_000;
-    this.timerId = window.setTimeout(() => this.run(), delay);
+    this.timerId = window.setTimeout(() => this.run(), 40_000);
   }
 
   private run(): void {

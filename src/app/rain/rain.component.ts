@@ -60,7 +60,8 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let hbFlicker = 0;
     let weather = 0; // 0 = full storm, 1 = sunny
 
-    let aCharBounds = { x: 0, y: 0, w: 0, h: 0 };
+    let aCharBounds  = { x: 0, y: 0, w: 0, h: 0 };
+    let iDotBounds   = { x: 0, y: 0, w: 0, h: 0 };
 
     type AState = 'idle' | 'pressing' | 'rising' | 'burning' | 'dousing';
     let aState: AState = 'idle';
@@ -100,14 +101,31 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       hitCtx.textBaseline = 'middle';
       hitCtx.fillStyle = 'white';
       hitCtx.fillText(textString, width / 2, height * (4 / 5));
-      const tW = hitCtx.measureText(textString).width;
-      const aW = textString.length > 0 ? hitCtx.measureText(textString[0]).width : 0;
+      const tW  = hitCtx.measureText(textString).width;
+      const aW  = textString.length > 0 ? hitCtx.measureText(textString[0]).width : 0;
+      const textLeft = width / 2 - tW / 2;
+      const cy = height * (4 / 5);
       aCharBounds = {
-        x: width / 2 - tW / 2,
-        y: height * (4 / 5) - fontSize * 0.55,
+        x: textLeft,
+        y: cy - fontSize * 0.55,
         w: aW,
         h: fontSize * 1.1,
       };
+
+      // Compute the 'i' tittle (dot) hit area
+      const iIdx = textString.indexOf('i');
+      if (iIdx >= 0) {
+        const preW = hitCtx.measureText(textString.slice(0, iIdx)).width;
+        const iW   = hitCtx.measureText('i').width;
+        iDotBounds = {
+          x: textLeft + preW,
+          y: cy - fontSize * 0.42,
+          w: iW,
+          h: fontSize * 0.14,
+        };
+      } else {
+        iDotBounds = { x: 0, y: 0, w: 0, h: 0 };
+      }
     }
 
     this.changeTextFn = (text: string) => {
@@ -1007,19 +1025,26 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     window.addEventListener('resize', this.resizeListener);
 
     this.clickListener = (e: MouseEvent) => {
-      if (aState === 'burning') {
-        triggerADouse();
-        return;
-      }
-      if (aState !== 'idle') return;
       const rect = canvas.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
+
+      // 'i' dot — triggers the footballer on the skate canvas
       if (
-        cx >= aCharBounds.x &&
-        cx <= aCharBounds.x + aCharBounds.w &&
-        cy >= aCharBounds.y &&
-        cy <= aCharBounds.y + aCharBounds.h
+        iDotBounds.w > 0 &&
+        cx >= iDotBounds.x && cx <= iDotBounds.x + iDotBounds.w &&
+        cy >= iDotBounds.y && cy <= iDotBounds.y + iDotBounds.h
+      ) {
+        this.appState.triggerFootballer();
+        return;
+      }
+
+      // 'A' — fire/douse animation
+      if (aState === 'burning') { triggerADouse(); return; }
+      if (aState !== 'idle') return;
+      if (
+        cx >= aCharBounds.x && cx <= aCharBounds.x + aCharBounds.w &&
+        cy >= aCharBounds.y && cy <= aCharBounds.y + aCharBounds.h
       ) {
         triggerAFire();
       }

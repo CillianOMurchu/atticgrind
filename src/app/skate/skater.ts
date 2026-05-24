@@ -24,9 +24,10 @@ function cruise(t: number): number {
 export class Skater {
   private trail: { x: number; state: FrameState; lf: number }[] = [];
   private prevJH = 0;
-  private prevBaseY = 0;
   private landingLF = -999;
   private lastMark = -99;
+  private wheelAngle = 0;
+  private prevX = 0;
 
   constructor(readonly config: SkaterConfig) {}
 
@@ -50,6 +51,11 @@ export class Skater {
     const x = -60 + (W + 120) * cruise(lf / this.config.sequence.duration);
     const { scale: s, alpha: a } = this.config;
 
+    // Accumulate wheel rotation from actual horizontal travel each frame
+    const wheelR = 5 * s;
+    this.wheelAngle += (x - this.prevX) / wheelR;
+    this.prevX = x;
+
     if (this.prevJH > 5 && state.jh <= 5) this.landingLF = lf;
     this.prevJH = state.jh;
 
@@ -59,12 +65,12 @@ export class Skater {
     if (state.jh > 10) {
       for (let i = 0; i < this.trail.length - 1; i++) {
         const t = this.trail[i];
-        this.drawBody(ctx, t.x, t.state, t.lf, a * (0.08 + i * 0.04), groundY, maxJH, s);
+        this.drawBody(ctx, t.x, t.state, t.lf, a * (0.08 + i * 0.04), groundY, maxJH, s, this.wheelAngle);
       }
     }
 
     this.drawDust(ctx, x, lf, groundY, s, a);
-    this.drawBody(ctx, x, state, lf, a, groundY, maxJH, s);
+    this.drawBody(ctx, x, state, lf, a, groundY, maxJH, s, this.wheelAngle);
   }
 
   private drawDust(
@@ -92,13 +98,13 @@ export class Skater {
     ctx: CanvasRenderingContext2D,
     x: number, state: FrameState, lf: number,
     alpha: number, groundY: number, maxJH: number, s: number,
+    wheelAngle: number,
   ): void {
-    const { jh, crouch: cr, boardKickflip, boardShuv, handstand: hs } = state;
+    const {
+      jh, crouch: cr, boardKickflip, boardShuv, handstand: hs,
+      torsoLean, headTilt, spineTwist, armL, armR,
+    } = state;
     const base = groundY - jh * s;
-
-    // Vertical velocity (positive = falling). Used for lean + landing squash.
-    const vy = base - this.prevBaseY;
-    this.prevBaseY = base;
 
     // Landing squash: deepen the crouch briefly after touchdown.
     const sinceLand = lf - this.landingLF;
@@ -124,8 +130,15 @@ export class Skater {
     const shldrY = lerp(uShldr, iShldr, hs);
     const headY  = lerp(uHead,  iHead,  hs);
 
-    // Lean reacts to vertical motion: forward when falling, back when rising.
-    const lean = (isAir || hs > 0) ? 0 : Math.max(-3, Math.min(3, vy * 0.4)) * s;
+    // torsoLean drives the horizontal body lean (radians → pixel offset).
+    // spineTwist adds a lateral shoulder offset for shuv/kickflip counter-rotation.
+    const lean     = torsoLean * 14 * s;
+    const headLean = headTilt  * 14 * s;
+    const twistOff = spineTwist * 3 * s;
+
+    // Shoulder pivot — lean shifts it forward, twist shifts it laterally.
+    const shldrX = x - 3 * s + lean + twistOff;
+    const shY    = shldrY + 5 * s;
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -140,26 +153,70 @@ export class Skater {
     ctx.fill();
     ctx.restore();
 
-    // Board
+    // Board + wheels
     ctx.save();
     ctx.translate(x, base);
     ctx.rotate(boardShuv);
     const flipS = Math.cos(boardKickflip);
     ctx.scale(1, flipS);
+
+    // Deck — sits above wheel centres
     ctx.fillStyle = flipS < 0 ? '#bbb' : '#fff';
-    ctx.fillRect(-19 * s, -4 * s, 38 * s, 6 * s);
-    ctx.beginPath();
-    ctx.arc(-13 * s, 3 * s, 3.5 * s, 0, Math.PI * 2);
-    ctx.arc( 13 * s, 3 * s, 3.5 * s, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(-20 * s, -10 * s, 40 * s, 4 * s);
+
+    // Spinning wheels — centre sits on the ground line (y = 0 in this context)
+    const wheelR = 5 * s;
+    for (const wx of [-13 * s, 13 * s]) {
+      // Tyre
+      ctx.fillStyle = '#ddd';
+      ctx.beginPath();
+      ctx.arc(wx, 0, wheelR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Spokes
+      ctx.strokeStyle = 'rgba(90,90,90,0.75)';
+      ctx.lineWidth = 0.9 * s;
+      for (let i = 0; i < 3; i++) {
+        const a = wheelAngle + (i / 3) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(wx, 0);
+        ctx.lineTo(wx + Math.cos(a) * (wheelR - 0.8 * s), Math.sin(a) * (wheelR - 0.8 * s));
+        ctx.stroke();
+      }
+
+      // Hub
+      ctx.fillStyle = '#666';
+      ctx.beginPath();
+      ctx.arc(wx, 0, 1.6 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
+
+    // Speed lines — horizontal streaks trailing behind the skater (to the left)
+    if (!isAir && hs === 0) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      const bx = x - 22 * s;
+      for (let i = 0; i < 5; i++) {
+        const yPos = kneeY + (i - 2) * 9 * s;
+        const len  = (14 + (4 - Math.abs(i - 2)) * 8) * s;
+        ctx.globalAlpha = alpha * (0.10 + (4 - Math.abs(i - 2)) * 0.05);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth   = Math.max(0.5, (1.8 - Math.abs(i - 2) * 0.4) * s);
+        ctx.beginPath();
+        ctx.moveTo(bx, yPos);
+        ctx.lineTo(bx - len, yPos);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = '#fff';
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Legs
+    // Legs — hip shifts with lean
     ctx.lineWidth = 5 * s;
     ctx.beginPath();
     ctx.moveTo(x - 5*s + lean, hipY);
@@ -171,53 +228,45 @@ export class Skater {
     ctx.stroke();
 
     // Torso
+    ctx.lineWidth = 5 * s;
     ctx.beginPath();
     ctx.moveTo(x + lean * 0.8, hipY);
-    ctx.lineTo(x - 3 * s + lean, shldrY);
+    ctx.lineTo(shldrX, shldrY);
     ctx.stroke();
 
-    // Arms — phase-shifted swing lags the body for follow-through
+    // Arms — driven by armL / armR from state (0 = hanging, 1 = overhead)
     ctx.lineWidth = 4 * s;
     if (hs > 0.05) {
+      // Handstand: both arms reach down to the ground
       const handY = lerp(shldrY + 16 * s, groundY - 4 * s, hs);
       ctx.beginPath();
-      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
-      ctx.quadraticCurveTo(x - 10*s, (shldrY + handY) * 0.5, x - 10*s, handY);
+      ctx.moveTo(shldrX, shY);
+      ctx.quadraticCurveTo(shldrX - 7*s, (shY + handY) * 0.5, shldrX - 10*s, handY);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
-      ctx.quadraticCurveTo(x + 8*s, (shldrY + handY) * 0.5, x + 8*s, handY);
-      ctx.stroke();
-    } else if (isAir) {
-      // Arms lag the jump arc by ~0.25π so they peak after the body does.
-      const t = jh / maxJH;
-      const lag = Math.sin(t * Math.PI - 0.25 * Math.PI) * 0.5 + 0.5;
-      const lHX = x - (18 + lag * 6) * s, lHY = shldrY - (4 + lag * 10) * s;
-      const rHX = x + (16 + lag * 4) * s, rHY = shldrY + (2 - lag * 8) * s;
-      ctx.beginPath();
-      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
-      ctx.quadraticCurveTo(x - 12*s, (shldrY + lHY) * 0.5, lHX, lHY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
-      ctx.quadraticCurveTo(x + 10*s, (shldrY + rHY) * 0.5, rHX, rHY);
+      ctx.moveTo(shldrX, shY);
+      ctx.quadraticCurveTo(shldrX + 11*s, (shY + handY) * 0.5, shldrX + 8*s, handY);
       ctx.stroke();
     } else {
-      // Idle/cruise: gentle counter-swing
-      const swing = Math.sin(lf * 0.18) * 4 * s;
+      // armL / armR interpolate from hanging (0) to overhead (1)
+      const lHX = x - (14 + armL * 4) * s;
+      const lHY = shY + (16 - armL * 24) * s;
       ctx.beginPath();
-      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
-      ctx.quadraticCurveTo(x - 10*s + lean, shldrY + 12*s, x - 14*s + lean, shldrY + 16*s + swing);
+      ctx.moveTo(shldrX, shY);
+      ctx.quadraticCurveTo((shldrX + lHX) * 0.5 - 3*s, (shY + lHY) * 0.5 + 3*s, lHX, lHY);
       ctx.stroke();
+
+      const rHX = x + (13 + armR * 3) * s;
+      const rHY = shY + (16 - armR * 24) * s;
       ctx.beginPath();
-      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
-      ctx.quadraticCurveTo(x + 6*s + lean, shldrY + 12*s, x + 10*s + lean, shldrY + 16*s - swing);
+      ctx.moveTo(shldrX, shY);
+      ctx.quadraticCurveTo((shldrX + rHX) * 0.5 + 3*s, (shY + rHY) * 0.5 + 3*s, rHX, rHY);
       ctx.stroke();
     }
 
-    // Head
+    // Head — uses headLean separately so it lags the torso (overlap principle)
     ctx.beginPath();
-    ctx.arc(x - 3 * s + lean, headY, 8 * s, 0, Math.PI * 2);
+    ctx.arc(x - 3 * s + headLean, headY, 8 * s, 0, Math.PI * 2);
     ctx.fill();
 
     // Occasional skid marks
