@@ -40,14 +40,14 @@ export class SkateComponent implements OnInit, OnDestroy {
   }
 
   onCanvasClick(event: MouseEvent): void {
-    const cx = event.clientX;
-    const cy = event.clientY;
-    for (const skater of this.skaters) {
-      if (skater.hitTest(cx, cy)) {
-        skater.knock();
-        break;
-      }
-    }
+    // const cx = event.clientX;
+    // const cy = event.clientY;
+    // for (const skater of this.skaters) {
+    //   if (skater.hitTest(cx, cy)) {
+    //     skater.knock();
+    //     break;
+    //   }
+    // }
   }
 
   private scheduleNext(): void {

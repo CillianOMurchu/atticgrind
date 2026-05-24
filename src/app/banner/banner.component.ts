@@ -162,13 +162,16 @@ export class BannerComponent implements OnInit, OnDestroy {
 
     const drawSkater = (x: number, groundY: number): void => {
       const s         = 1.0;
-      const step      = Math.sin(f * 0.32) * 10 * s;
+      // Apply a subtle, constant crouch so the banner skater has bent knees
+      // (looks forward, stable). Allow a small breathing motion only.
+      const crouch    = 0.35;
+      const breath    = Math.sin(f * 0.32) * 2 * s;
       const ankleY    = groundY - 8  * s;
-      const kneeY     = groundY - 24 * s;
-      const hipY      = groundY - 36 * s;
+      const kneeY     = groundY - (24 - crouch * 10) * s;
+      const hipY      = groundY - (36 - crouch * 12) * s;
       const shldrX    = x + 3 * s;
-      const shldrY    = groundY - 54 * s;
-      const headY     = groundY - 66 * s;
+      const shldrY    = groundY - (54 - crouch * 18) * s;
+      const headY     = groundY - (66 - crouch * 18) * s;
       const bannerCY  = groundY - 60;
 
       ctx.save();
@@ -194,9 +197,10 @@ export class BannerComponent implements OnInit, OnDestroy {
       ctx.lineJoin    = 'round';
       ctx.lineWidth   = 5 * s;
 
-      // Legs — mirrored for left-facing skater
-      seg(x-5*s, hipY,  x-13*s, kneeY+step,  x-11*s, ankleY+step*0.5,  5*s, 2.5*s);
-      seg(x+5*s, hipY,  x+11*s, kneeY-step,  x+9*s,  ankleY-step*0.5,  5*s, 2.5*s);
+      // Legs — mirrored for left-facing skater. Use small breath motion
+      // instead of large stepping so the skater appears crouched and still.
+      seg(x-5*s, hipY,  x-13*s, kneeY+breath,  x-11*s, ankleY+breath*0.5,  5*s, 2.5*s);
+      seg(x+5*s, hipY,  x+11*s, kneeY-breath,  x+9*s,  ankleY-breath*0.5,  5*s, 2.5*s);
 
       // Torso
       ctx.beginPath();
@@ -207,9 +211,10 @@ export class BannerComponent implements OnInit, OnDestroy {
       ctx.lineWidth = 4 * s;
 
       // Forward arm (left — direction of travel)
-      const armSwing = Math.sin(f * 0.18) * 4 * s;
-      const faHX = x - 14*s, faHY = shldrY + 16*s + armSwing;
-      const faEX = (shldrX + faHX) * 0.5 - 4*s, faEY = (shldrY+5*s + faHY) * 0.5 + 3*s;
+      // Reduce forward arm swing so skater looks stable and forward-facing.
+      const armSwing = Math.sin(f * 0.18) * 2 * s;
+      const faHX = x - 14*s, faHY = shldrY + 12*s + armSwing;
+      const faEX = (shldrX + faHX) * 0.5 - 4*s, faEY = (shldrY+5*s + faHY) * 0.5 + 2*s;
       seg(shldrX, shldrY+5*s,  faEX, faEY,  faHX, faHY,  4*s, 2*s);
 
       // Trailing arm — extends right to hold the banner rope

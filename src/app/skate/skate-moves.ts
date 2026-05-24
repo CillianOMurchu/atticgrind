@@ -22,6 +22,8 @@ export interface FrameState {
   boardShuv: number;
   /** Handstand inversion amount 0-1 (0 = upright, 1 = fully inverted on hands). */
   handstand: number;
+  /** Arms spread 0-1 (0 = by side, 1 = wide out). */
+  arms: number;
 }
 
 export interface Move {
@@ -47,7 +49,7 @@ export interface Sequence {
 
 const MAX_JH = 110;
 
-const ZERO: FrameState = { jh: 0, crouch: 0, boardKickflip: 0, boardShuv: 0, handstand: 0 };
+const ZERO: FrameState = { jh: 0, crouch: 0, boardKickflip: 0, boardShuv: 0, handstand: 0, arms: 0 };
 
 function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -66,6 +68,9 @@ function arc(t: number, airStart: number, airEnd: number, height = MAX_JH): numb
 function crouch(t: number, windStart: number, airStart: number, airEnd: number, landEnd: number): number {
   if (t >= windStart && t < airStart)
     return easeInOut((t - windStart) / (airStart - windStart));
+  // Knees to chest while in the air — hold peak during air phase
+  if (t >= airStart && t <= airEnd)
+    return 1;
   if (t > airEnd && t <= landEnd)
     return easeInOut((landEnd - t) / (landEnd - airEnd));
   return 0;
@@ -81,7 +86,8 @@ export function roll(duration = 40): Move {
   return {
     duration,
     label: 'roll',
-    getState: () => ({ ...ZERO }),
+    // Slight bent knees while rolling (looking forward, no movement).
+    getState: () => ({ ...ZERO, crouch: 0.35 }),
   };
 }
 
@@ -96,6 +102,7 @@ export const ollie: Move = {
       boardKickflip: 0,
       boardShuv:     0,
       handstand:     0,
+      arms:          t > 0.2 && t < 0.8 ? 1 : 0,
     };
   },
 };
@@ -112,6 +119,7 @@ export const kickflip: Move = {
       boardKickflip: flipT * Math.PI * 2,
       boardShuv:     0,
       handstand:     0,
+      arms:          t > 0.18 && t < 0.82 ? 1 : 0,
     };
   },
 };
@@ -128,6 +136,7 @@ export const shuvit: Move = {
       boardKickflip: 0,
       boardShuv:     shuvT * Math.PI * 2,
       handstand:     0,
+      arms:          t > 0.2 && t < 0.8 ? 1 : 0,
     };
   },
 };
@@ -150,6 +159,7 @@ export const handstand: Move = {
       boardKickflip: 0,
       boardShuv:     0,
       handstand:     inv,
+      arms:          0,
     };
   },
 };

@@ -12,88 +12,28 @@ export interface SkaterConfig {
   laneOffset: number;
 }
 
-interface TrailFrame { x: number; state: FrameState; localFrame: number; }
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
-
-function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+/** Mostly-linear cruise, soft ease at the very start and end only. */
+function cruise(t: number): number {
+  if (t < 0.12) return t * t / 0.24;            // ease in over first 12%
+  if (t > 0.88) { const u = 1 - t; return 1 - u * u / 0.24; }
+  return t;                                     // linear in the middle
 }
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function seg(
-  ctx: CanvasRenderingContext2D,
-  x1: number, y1: number,
-  jx: number, jy: number,
-  x2: number, y2: number,
-  lw: number, jr: number,
-): void {
-  ctx.lineWidth = lw;
-  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(jx, jy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(x2, y2); ctx.stroke();
-  if (jr > 0) { ctx.beginPath(); ctx.arc(jx, jy, jr, 0, Math.PI * 2); ctx.fill(); }
-}
-
-// ── Phase frame boundaries ────────────────────────────────────────────────────
-const F_FALL   = 38;
-const F_RUB    = 118;   // 80 frames sitting & rubbing
-const F_GETUP  = 143;   // 25 frames rising
-const F_GRAB   = 160;   // 17 frames walking to board
 
 export class Skater {
-  private trail: TrailFrame[] = [];
+  private trail: { x: number; state: FrameState; lf: number }[] = [];
   private prevJH = 0;
-  private landingLocalFrame = -999;
+  private prevBaseY = 0;
+  private landingLF = -999;
   private lastMark = -99;
-
-  // Hit detection – updated each normal draw tick
-  private lastX = 0;
-  private lastGroundY = 0;
-
-  // Fallen state
-  private fallen = false;
-  private fallenFrame = 0;
-  private fallenX = 0;
-  private fallenGroundY = 0;
-  private boardX = 0;
-  private boardVx = 0;
-  private runX = 0;
 
   constructor(readonly config: SkaterConfig) {}
 
   get totalFrames(): number { return this.config.delay + this.config.sequence.duration; }
 
-  /** Returns false while a fallen animation is still playing. */
   isDone(frame: number): boolean {
-    if (this.fallen) return false;
     return (frame - this.config.delay) > this.config.sequence.duration;
-  }
-
-  /** True if click (canvas coords) lands on this skater's body. */
-  hitTest(cx: number, cy: number): boolean {
-    if (this.fallen) return false;
-    const s = this.config.scale;
-    return (
-      cx >= this.lastX - 32 * s && cx <= this.lastX + 32 * s &&
-      cy >= this.lastGroundY - 80 * s && cy <= this.lastGroundY + 10 * s
-    );
-  }
-
-  /** Trigger the fall. Returns false if already fallen. */
-  knock(): boolean {
-    if (this.fallen) return false;
-    this.fallen = true;
-    this.fallenFrame = 0;
-    this.fallenX = this.lastX;
-    this.fallenGroundY = this.lastGroundY;
-    this.boardX = this.lastX + 6 * this.config.scale;
-    this.boardVx = 3.8;
-    this.runX = this.lastX;
-    this.trail = [];
-    return true;
   }
 
   draw(
@@ -103,269 +43,46 @@ export class Skater {
     groundY: number,
     maxJH: number,
   ): void {
-    if (this.fallen) {
-      this.drawFallenAnimation(ctx, W);
-      return;
-    }
-
     const lf = frame - this.config.delay;
     if (lf < 0 || lf > this.config.sequence.duration) return;
 
     const state = this.config.sequence.getState(lf);
-    const x = this.getX(lf, W);
-    const { scale, alpha } = this.config;
+    const x = -60 + (W + 120) * cruise(lf / this.config.sequence.duration);
+    const { scale: s, alpha: a } = this.config;
 
-    this.lastX = x;
-    this.lastGroundY = groundY;
-
-    if (this.prevJH > 5 && state.jh <= 5) this.landingLocalFrame = lf;
+    if (this.prevJH > 5 && state.jh <= 5) this.landingLF = lf;
     this.prevJH = state.jh;
 
-    this.trail.push({ x, state, localFrame: lf });
+    this.trail.push({ x, state, lf });
     if (this.trail.length > 4) this.trail.shift();
 
     if (state.jh > 10) {
       for (let i = 0; i < this.trail.length - 1; i++) {
         const t = this.trail[i];
-        this.drawBody(ctx, t.x, t.state, t.localFrame, alpha * (0.08 + i * 0.04), groundY, maxJH, scale);
+        this.drawBody(ctx, t.x, t.state, t.lf, a * (0.08 + i * 0.04), groundY, maxJH, s);
       }
     }
 
-    this.drawDust(ctx, x, lf, groundY, scale, alpha);
-    this.drawBody(ctx, x, state, lf, alpha, groundY, maxJH, scale);
+    this.drawDust(ctx, x, lf, groundY, s, a);
+    this.drawBody(ctx, x, state, lf, a, groundY, maxJH, s);
   }
-
-  private getX(localFrame: number, W: number): number {
-    return -60 + (W + 120) * easeInOutCubic(localFrame / this.config.sequence.duration);
-  }
-
-  // ── Fallen animation state machine ───────────────────────────────────────
-
-  private drawFallenAnimation(ctx: CanvasRenderingContext2D, W: number): void {
-    const s = this.config.scale;
-    const a = this.config.alpha;
-    const gY = this.fallenGroundY;
-
-    this.fallenFrame++;
-    const f = this.fallenFrame;
-
-    if (this.boardVx > 0.06) {
-      this.boardX += this.boardVx;
-      this.boardVx *= 0.93;
-    }
-
-    if (f <= F_FALL) {
-      this.drawFallingLerp(ctx, this.fallenX, gY, easeInOut(f / F_FALL), s, a);
-      this.drawFreeBoard(ctx, this.boardX, gY, s, a);
-    } else if (f <= F_RUB) {
-      this.drawSitting(ctx, this.fallenX, gY, f, s, a);
-      this.drawFreeBoard(ctx, this.boardX, gY, s, a);
-    } else if (f <= F_GETUP) {
-      const t = easeInOut((f - F_RUB) / (F_GETUP - F_RUB));
-      this.drawFallingLerp(ctx, this.fallenX, gY, 1 - t, s, a);
-      this.drawFreeBoard(ctx, this.boardX, gY, s, a);
-    } else if (f <= F_GRAB) {
-      const t = easeInOut((f - F_GETUP) / (F_GRAB - F_GETUP));
-      const walkX = this.fallenX + (this.boardX - this.fallenX) * t;
-      this.drawUpright(ctx, walkX, gY, f, s, a);
-      this.drawFreeBoard(ctx, t > 0.72 ? walkX : this.boardX, gY, s, a);
-      this.runX = walkX;
-    } else {
-      const speed = 5 * s + (f - F_GRAB) * 0.05;
-      this.runX += speed;
-      if (this.runX > W + 140) { this.fallen = false; return; }
-      this.drawRunning(ctx, this.runX, gY, f, s, a);
-    }
-  }
-
-  /** Lerps from upright (t=0) to lying flat on back (t=1). */
-  private drawFallingLerp(
-    ctx: CanvasRenderingContext2D,
-    x: number, gY: number, t: number, s: number, alpha: number,
-  ): void {
-    const ankleX = lerp(x,        x + 0,     t); const ankleY = lerp(gY - 8*s,  gY,        t);
-    const kneeX  = lerp(x,        x + 14*s,  t); const kneeY  = lerp(gY - 22*s, gY - 3*s,  t);
-    const hipX   = lerp(x,        x + 28*s,  t); const hipY   = lerp(gY - 34*s, gY - 2*s,  t);
-    const shldrX = lerp(x - 3*s,  x + 46*s,  t); const shldrY = lerp(gY - 52*s, gY - 8*s,  t);
-    const headX  = lerp(x - 3*s,  x + 58*s,  t); const headY  = lerp(gY - 64*s, gY - 14*s, t);
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 5 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(hipX - 4*s*(1-t), hipY);
-    ctx.quadraticCurveTo(kneeX - 5*s*(1-t), kneeY, ankleX - 4*s*(1-t), ankleY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(hipX + 4*s*(1-t), hipY);
-    ctx.quadraticCurveTo(kneeX + 4*s*(1-t), kneeY, ankleX + 3*s*(1-t), ankleY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(hipX, hipY); ctx.lineTo(shldrX, shldrY); ctx.stroke();
-
-    ctx.lineWidth = 4 * s;
-    const spread = t * 20 * s;
-    ctx.beginPath();
-    ctx.moveTo(shldrX, shldrY);
-    ctx.lineTo(shldrX - 10*s, shldrY - 8*s + spread * 0.4); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(shldrX, shldrY);
-    ctx.lineTo(shldrX + 10*s, shldrY + spread * 0.5); ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(headX, headY, 8 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  /** Sitting on ground — rubbing bum in embarrassment. */
-  private drawSitting(
-    ctx: CanvasRenderingContext2D,
-    x: number, gY: number, frame: number, s: number, alpha: number,
-  ): void {
-    const hipY   = gY - 18*s;
-    const shldrX = x - 8*s,  shldrY = gY - 36*s;
-    const headX  = x - 10*s, headY  = gY - 48*s;
-    const kneeX  = x + 22*s, kneeY  = gY - 12*s;
-    const ankleX = x + 32*s, ankleY = gY;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 5 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(x, hipY); ctx.quadraticCurveTo(kneeX, kneeY, ankleX, ankleY); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x - 4*s, hipY); ctx.quadraticCurveTo(kneeX - 9*s, kneeY + 4*s, ankleX - 6*s, ankleY); ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(x, hipY); ctx.lineTo(shldrX, shldrY); ctx.stroke();
-
-    ctx.lineWidth = 4 * s;
-
-    // Rubbing arm — swings behind body
-    const rub = Math.sin(frame * 0.28) * 10 * s;
-    ctx.beginPath();
-    ctx.moveTo(shldrX, shldrY);
-    ctx.lineTo(x + 8*s + rub * 0.4, gY - 8*s + rub); ctx.stroke();
-
-    // Other arm raised — embarrassed wave
-    const wave = Math.sin(frame * 0.14) * 5 * s;
-    ctx.beginPath();
-    ctx.moveTo(shldrX, shldrY);
-    ctx.lineTo(shldrX - 14*s, shldrY - 12*s + wave); ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(headX, headY, 8 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  /** Plain upright walking pose. */
-  private drawUpright(
-    ctx: CanvasRenderingContext2D,
-    x: number, gY: number, frame: number, s: number, alpha: number,
-  ): void {
-    const step = Math.sin(frame * 0.38) * 8 * s;
-    const ankleY = gY - 8*s, kneeY = gY - 22*s;
-    const hipY = gY - 34*s, shldrY = gY - 52*s, headY = gY - 64*s;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 5 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(x - 5*s, hipY); ctx.quadraticCurveTo(x - 13*s, kneeY + step, x - 11*s, ankleY + step * 0.5); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + 5*s, hipY); ctx.quadraticCurveTo(x + 11*s, kneeY - step, x + 9*s, ankleY - step * 0.5); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, hipY); ctx.lineTo(x - 3*s, shldrY); ctx.stroke();
-
-    ctx.lineWidth = 4 * s;
-    ctx.beginPath(); ctx.moveTo(x - 3*s, shldrY + 5*s); ctx.lineTo(x - 14*s, shldrY + 16*s - step * 0.5); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x - 3*s, shldrY + 5*s); ctx.lineTo(x + 10*s, shldrY + 16*s + step * 0.5); ctx.stroke();
-
-    ctx.beginPath(); ctx.arc(x - 3*s, headY, 8*s, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  /** Fast running with board at feet — chasing the others. */
-  private drawRunning(
-    ctx: CanvasRenderingContext2D,
-    x: number, gY: number, frame: number, s: number, alpha: number,
-  ): void {
-    const run = Math.sin(frame * 0.55) * 14 * s;
-    const ankleY = gY - 8*s, kneeY = gY - 22*s;
-    const hipY = gY - 34*s, shldrY = gY - 52*s, headY = gY - 64*s;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#fff';
-
-    // Board under feet
-    ctx.fillRect(x - 19*s, gY - 4*s, 38*s, 6*s);
-    ctx.beginPath();
-    ctx.arc(x - 13*s, gY + 3*s, 3.5*s, 0, Math.PI * 2);
-    ctx.arc(x + 13*s,  gY + 3*s, 3.5*s, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#fff';
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 5 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(x - 5*s, hipY); ctx.quadraticCurveTo(x - 13*s, kneeY + run, x - 11*s, ankleY + run * 0.6); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + 5*s, hipY); ctx.quadraticCurveTo(x + 11*s, kneeY - run, x + 9*s, ankleY - run * 0.6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, hipY); ctx.lineTo(x - 3*s, shldrY); ctx.stroke();
-
-    ctx.lineWidth = 4 * s;
-    ctx.beginPath(); ctx.moveTo(x - 3*s, shldrY + 5*s); ctx.lineTo(x - 18*s, shldrY - 5*s + run * 0.3); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x - 3*s, shldrY + 5*s); ctx.lineTo(x + 14*s, shldrY - 3*s - run * 0.3); ctx.stroke();
-
-    ctx.beginPath(); ctx.arc(x - 3*s, headY, 8*s, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  /** Board rolling free on the ground after the fall. */
-  private drawFreeBoard(
-    ctx: CanvasRenderingContext2D,
-    bx: number, gY: number, s: number, alpha: number,
-  ): void {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(bx - 19*s, gY - 4*s, 38*s, 6*s);
-    ctx.beginPath();
-    ctx.arc(bx - 13*s, gY + 3*s, 3.5*s, 0, Math.PI * 2);
-    ctx.arc(bx + 13*s,  gY + 3*s, 3.5*s, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // ── Normal animation helpers ──────────────────────────────────────────────
 
   private drawDust(
     ctx: CanvasRenderingContext2D,
-    x: number, localFrame: number, groundY: number, scale: number, alpha: number,
+    x: number, lf: number, groundY: number, s: number, alpha: number,
   ): void {
-    const since = localFrame - this.landingLocalFrame;
+    const since = lf - this.landingLF;
     if (since < 0 || since >= 18) return;
     const fade = 1 - since / 18;
     ctx.save();
     ctx.strokeStyle = `rgba(255,255,255,${fade * 0.5 * alpha})`;
-    ctx.lineWidth = scale;
+    ctx.lineWidth = s;
     for (let i = 0; i < 6; i++) {
-      const angle = -Math.PI + (i / 5) * Math.PI;
-      const len = (8 + since * 0.8 + i * 1.5) * scale;
+      const ang = -Math.PI + (i / 5) * Math.PI;
+      const len = (8 + since * 0.8 + i * 1.5) * s;
       ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * 12 * scale, groundY);
-      ctx.lineTo(x + Math.cos(angle) * (12 * scale + len), groundY + Math.sin(angle) * 2 * scale);
+      ctx.moveTo(x + Math.cos(ang) * 12 * s, groundY);
+      ctx.lineTo(x + Math.cos(ang) * (12 * s + len), groundY + Math.sin(ang) * 2 * s);
       ctx.stroke();
     }
     ctx.restore();
@@ -373,14 +90,23 @@ export class Skater {
 
   private drawBody(
     ctx: CanvasRenderingContext2D,
-    x: number, state: FrameState, localFrame: number,
+    x: number, state: FrameState, lf: number,
     alpha: number, groundY: number, maxJH: number, s: number,
   ): void {
     const { jh, crouch: cr, boardKickflip, boardShuv, handstand: hs } = state;
-    const base   = groundY - jh * s;
-    const squat  = cr * 14 * s;
-    const isAir  = jh > 5;
-    const tuck   = isAir ? Math.sin((jh / maxJH) * Math.PI) * 8 * s : 0;
+    const base = groundY - jh * s;
+
+    // Vertical velocity (positive = falling). Used for lean + landing squash.
+    const vy = base - this.prevBaseY;
+    this.prevBaseY = base;
+
+    // Landing squash: deepen the crouch briefly after touchdown.
+    const sinceLand = lf - this.landingLF;
+    const squash = sinceLand >= 0 && sinceLand < 8 ? (1 - sinceLand / 8) * 6 * s : 0;
+
+    const isAir = jh > 5;
+    const tuck  = isAir ? Math.sin((jh / maxJH) * Math.PI) * 8 * s : 0;
+    const squat = cr * 14 * s + squash;
 
     const uAnkle = base - 8  * s - tuck * 0.5;
     const uKnee  = base - 22 * s + squat * 0.5 - tuck;
@@ -388,22 +114,23 @@ export class Skater {
     const uShldr = base - 52 * s + squat * 0.7 - tuck * 0.3;
     const uHead  = base - 64 * s + squat * 0.5 - tuck * 0.2;
 
-    const iAnkle = groundY - 74 * s;
-    const iKnee  = groundY - 60 * s;
-    const iHip   = groundY - 44 * s;
-    const iShldr = groundY - 22 * s;
-    const iHead  = groundY - 8  * s;
+    // Handstand pose targets
+    const iAnkle = groundY - 74 * s, iKnee = groundY - 60 * s;
+    const iHip   = groundY - 44 * s, iShldr = groundY - 22 * s, iHead = groundY - 8 * s;
 
     const ankleY = lerp(uAnkle, iAnkle, hs);
     const kneeY  = lerp(uKnee,  iKnee,  hs);
     const hipY   = lerp(uHip,   iHip,   hs);
     const shldrY = lerp(uShldr, iShldr, hs);
     const headY  = lerp(uHead,  iHead,  hs);
-    const lean   = (isAir || hs > 0) ? 0 : Math.sin(localFrame * 0.15) * 1.5 * s;
+
+    // Lean reacts to vertical motion: forward when falling, back when rising.
+    const lean = (isAir || hs > 0) ? 0 : Math.max(-3, Math.min(3, vy * 0.4)) * s;
 
     ctx.save();
     ctx.globalAlpha = alpha;
 
+    // Shadow
     const shadowS = Math.max(0.3, 1 - jh / (maxJH * 1.4));
     ctx.save();
     ctx.globalAlpha = alpha * 0.35 * shadowS;
@@ -413,6 +140,7 @@ export class Skater {
     ctx.fill();
     ctx.restore();
 
+    // Board
     ctx.save();
     ctx.translate(x, base);
     ctx.rotate(boardShuv);
@@ -426,55 +154,87 @@ export class Skater {
     ctx.fill();
     ctx.restore();
 
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff';
-    ctx.lineCap = 'round';  ctx.lineJoin = 'round';
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#fff';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Legs
     ctx.lineWidth = 5 * s;
-
-    seg(ctx, x-5*s+lean, hipY,  x-13*s+lean, kneeY,  x-11*s, ankleY,  5*s, 2.5*s);
-    seg(ctx, x+5*s+lean, hipY,  x+11*s+lean, kneeY,  x+9*s,  ankleY,  5*s, 2.5*s);
-
     ctx.beginPath();
-    ctx.moveTo(x + lean * 0.8, hipY); ctx.lineTo(x - 3 * s + lean, shldrY); ctx.stroke();
+    ctx.moveTo(x - 5*s + lean, hipY);
+    ctx.quadraticCurveTo(x - 13*s + lean, kneeY, x - 11*s, ankleY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 5*s + lean, hipY);
+    ctx.quadraticCurveTo(x + 11*s + lean, kneeY, x + 9*s, ankleY);
+    ctx.stroke();
 
+    // Torso
+    ctx.beginPath();
+    ctx.moveTo(x + lean * 0.8, hipY);
+    ctx.lineTo(x - 3 * s + lean, shldrY);
+    ctx.stroke();
+
+    // Arms — phase-shifted swing lags the body for follow-through
     ctx.lineWidth = 4 * s;
     if (hs > 0.05) {
       const handY = lerp(shldrY + 16 * s, groundY - 4 * s, hs);
-      const lhEX = (x-3*s+lean + x-10*s) * 0.5 - 3*s, lhEY = (shldrY+5*s + handY) * 0.5 + 3*s;
-      seg(ctx, x-3*s+lean, shldrY+5*s,  lhEX, lhEY,  x-10*s, handY,  4*s, 2*s);
-      const rhEX = (x-3*s+lean + x+8*s) * 0.5 + 3*s,  rhEY = (shldrY+5*s + handY) * 0.5 + 3*s;
-      seg(ctx, x-3*s+lean, shldrY+5*s,  rhEX, rhEY,  x+8*s,  handY,  4*s, 2*s);
+      ctx.beginPath();
+      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
+      ctx.quadraticCurveTo(x - 10*s, (shldrY + handY) * 0.5, x - 10*s, handY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
+      ctx.quadraticCurveTo(x + 8*s, (shldrY + handY) * 0.5, x + 8*s, handY);
+      ctx.stroke();
     } else if (isAir) {
-      const swing = Math.sin((jh / maxJH) * Math.PI);
-      const laHX = x-(18+swing*4)*s, laHY = shldrY-(8+swing*6)*s;
-      const laEX = (x-3*s+lean + laHX) * 0.5 - 3*s, laEY = (shldrY+5*s + laHY) * 0.5;
-      seg(ctx, x-3*s+lean, shldrY+5*s,  laEX, laEY,  laHX, laHY,  4*s, 2*s);
-      const raHX = x+(16+swing*4)*s, raHY = shldrY-(2+swing*4)*s;
-      const raEX = (x-3*s+lean + raHX) * 0.5 + 3*s, raEY = (shldrY+5*s + raHY) * 0.5;
-      seg(ctx, x-3*s+lean, shldrY+5*s,  raEX, raEY,  raHX, raHY,  4*s, 2*s);
+      // Arms lag the jump arc by ~0.25π so they peak after the body does.
+      const t = jh / maxJH;
+      const lag = Math.sin(t * Math.PI - 0.25 * Math.PI) * 0.5 + 0.5;
+      const lHX = x - (18 + lag * 6) * s, lHY = shldrY - (4 + lag * 10) * s;
+      const rHX = x + (16 + lag * 4) * s, rHY = shldrY + (2 - lag * 8) * s;
+      ctx.beginPath();
+      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
+      ctx.quadraticCurveTo(x - 12*s, (shldrY + lHY) * 0.5, lHX, lHY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
+      ctx.quadraticCurveTo(x + 10*s, (shldrY + rHY) * 0.5, rHX, rHY);
+      ctx.stroke();
     } else {
-      const armSwing = Math.sin(localFrame * 0.18) * 4 * s;
-      const lHX = x-14*s+lean, lHY = shldrY+16*s+armSwing;
-      const lEX = (x-3*s+lean + lHX) * 0.5 - 4*s, lEY = (shldrY+5*s + lHY) * 0.5 + 3*s;
-      seg(ctx, x-3*s+lean, shldrY+5*s,  lEX, lEY,  lHX, lHY,  4*s, 2*s);
-      const rHX = x+10*s+lean, rHY = shldrY+16*s-armSwing;
-      const rEX = (x-3*s+lean + rHX) * 0.5 + 4*s, rEY = (shldrY+5*s + rHY) * 0.5 + 3*s;
-      seg(ctx, x-3*s+lean, shldrY+5*s,  rEX, rEY,  rHX, rHY,  4*s, 2*s);
+      // Idle/cruise: gentle counter-swing
+      const swing = Math.sin(lf * 0.18) * 4 * s;
+      ctx.beginPath();
+      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
+      ctx.quadraticCurveTo(x - 10*s + lean, shldrY + 12*s, x - 14*s + lean, shldrY + 16*s + swing);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 3*s + lean, shldrY + 5*s);
+      ctx.quadraticCurveTo(x + 6*s + lean, shldrY + 12*s, x + 10*s + lean, shldrY + 16*s - swing);
+      ctx.stroke();
     }
 
+    // Head
     ctx.beginPath();
-    ctx.arc(x - 3 * s + lean, headY, 8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.arc(x - 3 * s + lean, headY, 8 * s, 0, Math.PI * 2);
+    ctx.fill();
 
-    if (!isAir && hs === 0 && localFrame - this.lastMark > 12 && Math.random() < 0.08) {
-      this.lastMark = localFrame;
+    // Occasional skid marks
+    if (!isAir && hs === 0 && lf - this.lastMark > 12 && Math.random() < 0.08) {
+      this.lastMark = lf;
       ctx.save();
       ctx.globalAlpha = alpha * 0.22;
       ctx.strokeStyle = '#fff';
       ctx.lineCap = 'round';
       for (let i = 0; i < 3; i++) {
-        const dy  = (i - 1) * 5 * s;
+        const dy = (i - 1) * 5 * s;
         const len = (3 - Math.abs(i - 1)) * 7 * s;
         ctx.lineWidth = Math.max(0.5, (2 - Math.abs(i - 1)) * s);
-        ctx.beginPath(); ctx.moveTo(x + 20*s, ankleY + dy); ctx.lineTo(x + 20*s + len, ankleY + dy); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x + 20*s, ankleY + dy);
+        ctx.lineTo(x + 20*s + len, ankleY + dy);
+        ctx.stroke();
       }
       ctx.restore();
     }

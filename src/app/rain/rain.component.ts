@@ -25,6 +25,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
   private resizeListener = () => {};
   private changeTextFn: ((text: string) => void) | null = null;
   private setWeatherFn: ((w: number) => void) | null = null;
+  private clickListener: (e: MouseEvent) => void = () => {};
 
   ngAfterViewInit(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -59,6 +60,20 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     let hbFlicker = 0;
     let weather = 0; // 0 = full storm, 1 = sunny
 
+    let aCharBounds = { x: 0, y: 0, w: 0, h: 0 };
+    let swordFrame = -1;
+    let slashFade = 0;
+    const SWORD_ANGLE = -Math.PI / 5.5;
+    const SWORD_THRUST_F = 9;
+    const SWORD_HOLD_F = 22;
+    const SWORD_WITHDRAW_F = 10;
+    const SWORD_TOTAL_F = SWORD_THRUST_F + SWORD_HOLD_F + SWORD_WITHDRAW_F;
+    const SWORD_SLASH_FADE = 30;
+
+    function swordEase(t: number): number {
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+
     function resize() {
       width = canvas.width = window.innerWidth;
       height = canvas.height = window.innerHeight;
@@ -80,6 +95,14 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       hitCtx.textBaseline = 'middle';
       hitCtx.fillStyle = 'white';
       hitCtx.fillText(textString, width / 2, height * (4 / 5));
+      const tW = hitCtx.measureText(textString).width;
+      const aW = textString.length > 0 ? hitCtx.measureText(textString[0]).width : 0;
+      aCharBounds = {
+        x: width / 2 - tW / 2,
+        y: height * (4 / 5) - fontSize * 0.55,
+        w: aW,
+        h: fontSize * 1.1,
+      };
     }
 
     this.changeTextFn = (text: string) => {
@@ -602,6 +625,139 @@ export class RainComponent implements AfterViewInit, OnDestroy {
       ctx.fillRect(0, 0, width, height);
     }
 
+    function triggerSword() {
+      if (swordFrame >= 0) return;
+      swordFrame = 0;
+    }
+
+    function drawSword() {
+      const pcx = width / 2;
+      const pcy = height * 0.45;
+      const cos = Math.cos(SWORD_ANGLE);
+      const sin = Math.sin(SWORD_ANGLE);
+      const tipLen = height * 0.5;
+      const pommelLen = height * 0.13;
+
+      if (slashFade > 0) {
+        slashFade--;
+        const ft = slashFade / SWORD_SLASH_FADE;
+        const tx = pcx + cos * tipLen, ty = pcy + sin * tipLen;
+        const px = pcx - cos * pommelLen, py = pcy - sin * pommelLen;
+        ctx.save();
+        const slGrad = ctx.createLinearGradient(px, py, tx, ty);
+        slGrad.addColorStop(0, `rgba(100, 170, 255, 0)`);
+        slGrad.addColorStop(0.5, `rgba(180, 220, 255, ${ft * 0.35})`);
+        slGrad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+        ctx.strokeStyle = slGrad;
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = `rgba(150, 200, 255, ${ft * 0.5})`;
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.restore();
+      }
+
+      if (swordFrame < 0) return;
+
+      const f = swordFrame++;
+      if (f >= SWORD_TOTAL_F) { swordFrame = -1; slashFade = SWORD_SLASH_FADE; return; }
+
+      let bladeT: number;
+      let phase: 'thrust' | 'hold' | 'withdraw';
+      if (f < SWORD_THRUST_F) {
+        phase = 'thrust';
+        bladeT = swordEase(f / SWORD_THRUST_F);
+      } else if (f < SWORD_THRUST_F + SWORD_HOLD_F) {
+        phase = 'hold';
+        bladeT = 1;
+      } else {
+        phase = 'withdraw';
+        bladeT = 1 - swordEase((f - SWORD_THRUST_F - SWORD_HOLD_F) / SWORD_WITHDRAW_F);
+      }
+
+      const tX = pcx + cos * tipLen * bladeT;
+      const tY = pcy + sin * tipLen * bladeT;
+      const pX = pcx - cos * pommelLen * bladeT;
+      const pY = pcy - sin * pommelLen * bladeT;
+
+      ctx.save();
+
+      if (phase === 'thrust' && f === 0) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      if (phase === 'thrust') {
+        const sf = (1 - f / SWORD_THRUST_F) * 0.5;
+        ctx.save();
+        ctx.strokeStyle = `rgba(200, 228, 255, ${sf})`;
+        ctx.lineWidth = 0.8;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const r1 = 10 + Math.random() * 12;
+          const r2 = r1 + 25 + Math.random() * 45;
+          ctx.beginPath();
+          ctx.moveTo(pcx + Math.cos(a) * r1, pcy + Math.sin(a) * r1);
+          ctx.lineTo(pcx + Math.cos(a) * r2, pcy + Math.sin(a) * r2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      if (bladeT > 0.01) {
+        ctx.save();
+        const glowG = ctx.createLinearGradient(pX, pY, tX, tY);
+        glowG.addColorStop(0, 'rgba(100, 160, 255, 0)');
+        glowG.addColorStop(0.25, 'rgba(160, 210, 255, 0.25)');
+        glowG.addColorStop(0.75, 'rgba(220, 242, 255, 0.4)');
+        glowG.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+        ctx.strokeStyle = glowG;
+        ctx.lineWidth = 16;
+        ctx.lineCap = 'round';
+        ctx.shadowColor = 'rgba(140, 200, 255, 0.7)';
+        ctx.shadowBlur = 22;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.moveTo(pX, pY); ctx.lineTo(tX, tY); ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        const bladeG = ctx.createLinearGradient(pX, pY, tX, tY);
+        bladeG.addColorStop(0, 'rgba(160, 195, 225, 0.85)');
+        bladeG.addColorStop(0.45, 'rgba(245, 252, 255, 0.98)');
+        bladeG.addColorStop(0.82, 'rgba(215, 235, 255, 0.92)');
+        bladeG.addColorStop(1, 'rgba(255, 255, 255, 0.65)');
+        ctx.strokeStyle = bladeG;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.shadowColor = 'rgba(200, 225, 255, 1)';
+        ctx.shadowBlur = 7;
+        ctx.beginPath(); ctx.moveTo(pX, pY); ctx.lineTo(tX, tY); ctx.stroke();
+        ctx.restore();
+      }
+
+      const ba = phase === 'hold' ? 0.7 + 0.2 * Math.sin(f * 0.55) : bladeT;
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 255, 255, ${ba * 0.95})`;
+      ctx.shadowColor = 'rgba(180, 220, 255, 1)';
+      ctx.shadowBlur = 20;
+      ctx.beginPath(); ctx.arc(pcx, pcy, 3 * Math.max(0.3, bladeT), 0, Math.PI * 2); ctx.fill();
+      if (bladeT > 0.1 && (phase === 'thrust' || (phase === 'hold' && f < SWORD_THRUST_F + 6))) {
+        ctx.strokeStyle = `rgba(255, 255, 255, ${ba * 0.7})`;
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(pcx, pcy);
+          ctx.lineTo(pcx + Math.cos(a) * 8 * bladeT, pcy + Math.sin(a) * 8 * bladeT);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
+      ctx.restore();
+    }
+
     function init() {
       resize();
       initClouds();
@@ -685,6 +841,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
 
       drawSunnyOverlay();
       drawHappyBirthday();
+      drawSword();
 
       this.rafId = requestAnimationFrame(animate);
     };
@@ -694,6 +851,23 @@ export class RainComponent implements AfterViewInit, OnDestroy {
     };
     this.resizeListener = resize;
     window.addEventListener('resize', this.resizeListener);
+
+    this.clickListener = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      console.log('click', { cx, cy, bounds: { ...aCharBounds } });
+      if (
+        cx >= aCharBounds.x &&
+        cx <= aCharBounds.x + aCharBounds.w &&
+        cy >= aCharBounds.y &&
+        cy <= aCharBounds.y + aCharBounds.h
+      ) {
+        triggerSword();
+      }
+    };
+    canvas.addEventListener('click', this.clickListener);
+
     init();
 
     this.subs.add(
@@ -704,6 +878,7 @@ export class RainComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     window.removeEventListener('resize', this.resizeListener);
+    this.canvasRef.nativeElement.removeEventListener('click', this.clickListener);
     this.subs.unsubscribe();
   }
 }
